@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nyx.local/schemas/nyx-config.schema.json",
+  "title": "Nyx Config",
+  "type": "object",
+  "required": [
+    "watchedDirectories",
+    "mockDrive",
+    "providers",
+    "routing",
+    "advisory"
+  ],
+  "properties": {
+    "watchedDirectories": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "path"
+        ],
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "recursive": {
+            "type": "boolean",
+            "default": true
+          },
+          "include": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "exclude": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "providers": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "mockDrive": {
+      "type": "object",
+      "required": [
+        "enabled",
+        "rootFolder"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "rootFolder": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": true
+    },
+    "routing": {
+      "type": "object",
+      "properties": {
+        "categoryPreferences": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "advisory": {
+      "type": "object",
+      "properties": {
+        "quotaWarningPercent": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "staleFileDays": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "pricingRefreshDays": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": false
+}

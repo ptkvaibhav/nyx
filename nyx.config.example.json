@@ -1,0 +1,74 @@
+{
+  "watchedDirectories": [
+    {
+      "path": "C:/Users/example/Documents",
+      "recursive": true,
+      "include": [
+        "**/*"
+      ],
+      "exclude": [
+        "**/.env",
+        "**/.env.*",
+        "**/.git/**",
+        "**/node_modules/**",
+        "**/Temp/**",
+        "**/packages/**",
+        "**/Drive/**",
+        "**/.nyx/**",
+        "**/.venv/**",
+        "**/dist/**"
+      ]
+    }
+  ],
+  "mockDrive": {
+    "enabled": true,
+    "rootFolder": "./Drive"
+  },
+  "providers": {
+    "googleDrive": {
+      "enabled": true,
+      "mode": "local-folder",
+      "folderName": "GoogleDrive",
+      "capacityBytes": 16106127360
+    },
+    "oneDrive": {
+      "enabled": true,
+      "mode": "local-folder",
+      "folderName": "OneDrive",
+      "capacityBytes": 5368709120
+    },
+    "github": {
+      "enabled": true,
+      "defaultVisibility": "private",
+      "promptBeforeCreateRepository": true
+    }
+  },
+  "routing": {
+    "categoryPreferences": {
+      "document": [
+        "googleDrive",
+        "oneDrive"
+      ],
+      "image": [
+        "googleDrive",
+        "oneDrive"
+      ],
+      "video": [
+        "googleDrive",
+        "oneDrive"
+      ],
+      "archive": [
+        "googleDrive",
+        "oneDrive"
+      ],
+      "code": [
+        "github"
+      ]
+    }
+  },
+  "advisory": {
+    "quotaWarningPercent": 85,
+    "staleFileDays": 730,
+    "pricingRefreshDays": 14
+  }
+}

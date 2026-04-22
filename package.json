@@ -1,0 +1,24 @@
+{
+  "name": "nyx",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Quota-aware local-to-cloud backup router",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "plan": "node src/cli.js plan",
+    "doctor": "node src/cli.js doctor",
+    "demo": "node src/cli.js demo",
+    "init-drive": "node src/cli.js init-drive",
+    "drive-status": "node src/cli.js drive-status",
+    "sync-file": "node src/cli.js sync-file",
+    "fingerprint": "node src/cli.js fingerprint",
+    "classify": "node src/cli.js classify",
+    "check:quality": "node scripts/check-quality.js",
+    "check:security": "node scripts/check-security.js",
+    "test:smoke": "node scripts/run-smoke.js",
+    "test": "node --test --test-isolation=none"
+  }
+}

@@ -1,0 +1,9 @@
+node_modules/
+.nyx/
+dist/
+.env
+.DS_Store
+Thumbs.db
+Drive/.nyx-drive-state.json
+Drive/GoogleDrive/
+Drive/OneDrive/
