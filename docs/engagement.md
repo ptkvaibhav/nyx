@@ -1,6 +1,8 @@
 # Nyx Engagement
 
-This file controls what Nyx is allowed to inspect and how it should classify, organize, and protect files.
+This file defines what Nyx is allowed to scan and how it should treat files during audit, organization, backup, and archival.
+
+Nyx must treat this file as the source of truth for scan scope and user review rules.
 
 ## Managed Directories
 
@@ -13,9 +15,10 @@ Current selection:
 User notes:
 
 - Add or remove managed directories here before running a full scan.
-- System-wide scanning is not allowed outside these approved roots.
+- Do not include system directories unless you explicitly want them reviewed.
+- Nyx must never mutate files outside these approved roots.
 
-## Safe Irrelevant File Rules
+## Safe Irrelevance File Rules
 
 Nyx should begin with a conservative review-only rule set. Nothing in this list may be deleted without showing proof and receiving user confirmation.
 
@@ -26,12 +29,13 @@ Suggested starter rules:
 - flight tickets older than 2 years
 - train tickets older than 2 years
 - old resumes when a newer resume for the same person exists
-- expired exports or generated reports that are newer elsewhere
+- superseded exports or generated reports that have a newer replacement
 
 User review:
 
 - Add file patterns that are obviously disposable for your workflow.
 - Remove rules that are too aggressive for your files.
+- Expand the list only after reviewing real findings.
 
 ## Structured File Definition
 
@@ -60,7 +64,7 @@ Pending confirmation:
 
 ## Important Files And Folders
 
-Nyx should treat these as important by default until the user confirms otherwise:
+Nyx should treat these as important by default until the user confirms otherwise.
 
 Important file categories:
 
@@ -89,7 +93,17 @@ User confirmation required:
 
 - confirm which categories are important
 - confirm which folders should always keep a local copy plus a cloud backup
-- confirm which low-priority categories may become cloud-only after verified backup
+- confirm which lower-priority categories may become cloud-only after verified backup
+
+## Cloud Mirroring
+
+Nyx should organize cloud storage using the same overall structure as local storage, but it may use a cleaner taxonomy where needed.
+
+Examples:
+
+- preserve major category folders across local and cloud
+- simplify noisy local nesting when cloud placement is clearer
+- keep important content easy to locate in both places
 
 ## Approval Gates
 

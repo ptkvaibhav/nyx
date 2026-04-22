@@ -2,379 +2,233 @@
 
 ## Goal
 
-Build a local agent that watches user-approved directories, identifies each file by stable content fingerprints, decides which connected cloud provider is appropriate, and uploads the file while preserving or inferring folder structure.
+Build a file organization system that audits user-approved local directories, identifies duplicates and safe irrelevance candidates, proposes structure and naming improvements, mirrors that organization to cloud storage, and then protects important content with verified backups.
 
-## Product Constraints
+## Product Workflow
 
-### 1. Do not identify files by name
+### 1. Local Audit
 
-Names move. Names change. A usable system needs a content-first identity model:
+- scan only the directories the user approved
+- fingerprint files by content
+- classify file type and likely purpose
+- detect duplicates
+- identify stale and safe irrelevance candidates
+- determine whether files are structured or unstructured
 
-- Local primary fingerprint: SHA-256
-- Compatibility fingerprints: MD5 for Google Drive binary files, SHA-1 for Git blob compatibility, file size, MIME type, modified time
-- Provider object identity: provider item ID plus provider-native hash when available
+### 2. Review
 
-### 2. Do not treat all cloud providers as interchangeable
+- show duplicate evidence
+- show irrelevance evidence
+- show rename and move proposals
+- ask for confirmation before mutation
 
-- Google Drive and OneDrive are general-purpose document and media targets.
-- GitHub is a source-control target, not a generic personal file vault.
-- GitHub should be used for code assets and repository workflows, not arbitrary PDFs, videos, or large personal binaries.
+### 3. Local Organization
 
-### 3. Do not touch active repositories without explicit policy
+- rename files using user-approved naming rules
+- move files into the best existing folder
+- create new folders only when no suitable destination exists
+- log every action for rollback and auditability
 
-If a code file is inside an existing Git repository, Nyx should leave the folder alone and record why it skipped it. If a code folder is not a repository, Nyx can suggest repository creation and ask for confirmation.
+### 4. Cloud Audit And Organization
 
-### 4. Do not scan the entire machine by default
+- inspect supported cloud providers
+- apply the same duplicate, structure, and naming rules there
+- organize cloud storage to mirror local structure with a cleaner taxonomy where useful
 
-Nyx should only monitor explicit allowlisted directories from the user. System directories, app caches, secrets, and temporary folders need exclusion rules.
+### 5. Protect Important Content
 
-### 5. Pricing data is volatile
+- back up important categories and folders redundantly
+- verify remote object proof before marking a file protected
 
-Storage-plan suggestions should come from a refreshable pricing catalog with a recorded verification date. The advisor should never present hardcoded plan prices without an "as of" timestamp.
+### 6. Archive Lower-Priority Content
 
-## Recommended MVP Scope
+- upload lower-priority files to cloud storage
+- verify upload proof
+- ask for confirmation
+- only then remove the local copy
 
-Start with:
+## Non-Negotiable Rules
 
-1. Explicit watched directories.
-2. Google Drive and OneDrive as storage providers.
-3. GitHub only for code policy decisions and repo suggestions.
-4. Local content fingerprinting and cataloging.
-5. A planner that picks the best eligible provider based on:
-   - category fit
-   - free space
-   - file size limits
-   - provider health
-   - duplicate detection status
+### Scope Control
 
-Do not start with:
+- Nyx may only scan directories listed in `docs/engagement.md`.
+- All other paths are out of scope and must be ignored.
 
-- cross-provider cloud-to-cloud migrations
-- multi-device sync conflict resolution
-- organization-wide enterprise admin features
-- AI-generated deletion without user review
+### Approval Gates
+
+Nyx must ask the user before:
+
+- renaming files
+- moving files in batch
+- deleting duplicates
+- deleting irrelevant files
+- deleting a local copy after verified cloud backup
+
+### Evidence First
+
+Every mutation proposal must include evidence:
+
+- duplicate proof: shared content hash and file paths
+- irrelevance proof: matched rule and supporting metadata
+- rename proof: current name, proposed name, and reason
+- move proof: current folder, target folder, and reason
+- backup proof: provider, remote path or ID, verification timestamp
+
+## Structured vs Unstructured Definition
+
+A file is considered structured only when:
+
+- file content matches the file name
+- file is placed in an appropriate folder for that name and content
+- there is no obvious better destination
+
+Anything else is unstructured or weakly structured and should be surfaced during review.
+
+## Safe Irrelevance Rules
+
+Initial irrelevance support must remain conservative and review-only.
+
+Safe starter rules:
+
+- exact duplicate files by content hash
+- older installers when a newer installer for the same product exists
+- flight tickets older than 2 years
+- train tickets older than 2 years
+- old resumes when a newer resume for the same person exists
+- superseded exports or generated reports when a newer copy exists
+
+These rules should remain configurable and user-reviewed in `docs/engagement.md`.
+
+## Naming Strategy
+
+Nyx must use category-specific naming rules and require confirmation before rename execution.
+
+Initial examples:
+
+- latest resume: `Name_Resume.ext`
+- travel tickets: `TicketType_From_to_To_Date.ext`
+
+The final naming system should support:
+
+- per-category templates
+- date normalization
+- version suffix rules
+- safe preview mode before applying renames
 
 ## Architecture
 
-### Core Components
+### Core Modules
 
-1. Config Manager
-   - Loads watched directories, provider settings, routing policy, exclusions, and advisory thresholds.
+1. Engagement Parser
+   - Reads managed directories, safe irrelevance rules, naming guidance, important categories, and approval requirements from the engagement markdown.
 
 2. Local Scanner
-   - Initial crawl of watched roots.
-   - Normalizes file paths, ignores excluded content, and produces scan events.
+   - Walks approved roots only.
+   - Applies exclusions strictly.
+   - Emits file candidates for cataloging.
 
-3. Watcher
-   - Real-time file create and modify detection.
-   - Debounces rapid writes so partially written files are not uploaded.
+3. Fingerprint Service
+   - Computes SHA-256 as the primary duplicate key.
+   - Stores size, extension, modified time, and compatibility hashes when useful.
 
-4. Fingerprint Service
-   - Computes SHA-256, MD5, SHA-1, file size, extension, and MIME guess.
-   - Produces a stable local file profile.
+4. Content Classifier
+   - Classifies file category and likely purpose.
+   - Detects content hints such as resume, ticket, installer, invoice, archive, source code, or personal media.
 
-5. Classifier
-   - Determines file category: document, image, video, archive, code, data, other.
-   - Generates suggested folder segments such as `Resumes`, `Projects`, `Photos`, or `Archives`.
+5. Structure Analyzer
+   - Scores whether a file is already well placed and well named.
+   - Produces structured, weakly structured, or unstructured outcomes.
 
-6. Repository Detector
-   - Detects whether a file or directory lives inside a Git repository.
-   - Applies a strict skip policy for existing repositories.
+6. Duplicate Engine
+   - Groups exact duplicates by hash.
+   - Produces review evidence without deleting anything automatically.
 
-7. Provider Catalog
-   - Stores connected accounts, free space, provider capabilities, limits, and current health.
+7. Relevance Engine
+   - Applies conservative review rules for stale or irrelevant files.
+   - Produces explanations and confidence levels.
 
-8. Cloud Index
-   - Tracks what Nyx has already uploaded and what provider IDs map to which local fingerprints.
-   - Prevents repeated "does this already exist" scans for the same file.
+8. Naming And Folder Proposal Engine
+   - Suggests filenames and folder destinations based on category and existing structure.
 
-9. Planner
-   - Filters providers by relevance and eligibility.
-   - Checks duplicate evidence.
-   - Selects the highest-scoring provider.
-   - Produces an execution plan or a user prompt.
+9. Review Queue
+   - Stores rename, move, delete, and archive proposals waiting for user approval.
 
-10. Executor
-    - Creates remote folders.
-    - Uploads the file.
-    - Writes provider IDs and hashes back to the catalog.
+10. Execution Engine
+    - Applies only approved changes.
+    - Writes an audit trail and rollback metadata.
 
-11. Advisory Engine
-    - Detects quota pressure.
-    - Suggests stale or redundant files for review.
-    - Compares usage trend to current plan capacity and pricing catalog.
+11. Cloud Provider Layer
+    - Audits cloud providers using the same classification and structure rules.
+    - Stores backup proof and remote metadata.
 
-## Provider Strategy
+12. Protection Planner
+    - Ensures important files have redundant storage.
+    - Marks low-priority files eligible for cloud-only archival.
 
-### Google Drive
+## Data Model Direction
 
-Use for documents, PDFs, images, videos, and general archives.
+The first persisted catalog should track:
 
-Strengths:
+- managed roots
+- local files
+- content hashes
+- structure scores
+- duplicate groups
+- irrelevance findings
+- rename and move proposals
+- approval state
+- backup proof
+- cloud item mappings
 
-- Good fit for documents and general storage.
-- Exposes `storageQuota`.
-- Supports `md5Checksum` on binary files.
-- Supports app-specific metadata through `appProperties`.
+SQLite remains the right first persistence layer for this.
 
-Implementation note:
+## Delivery Plan
 
-- Nyx should store its own content fingerprint in `appProperties` where possible so later duplicate checks are cheap.
+### V1: Repository And Workflow Alignment
 
-### OneDrive
+- engagement template
+- product docs
+- verification scripts
+- local mock-drive scaffold
 
-Use for documents, images, videos, and general personal file backup.
+### V2: Local Audit Foundation
 
-Strengths:
+- parse engagement rules
+- scan approved roots only
+- fingerprint files
+- classify files
+- detect duplicates
+- report structured vs unstructured files
 
-- Exposes drive quota through the drive resource.
-- Exposes file hashes via the `file.hashes` facet.
-- Supports efficient change tracking through `delta`.
+### V3: Review And Organization Proposals
 
-Implementation note:
+- rename proposal engine
+- folder proposal engine
+- irrelevance review engine
+- user approval queue
 
-- OneDrive reliably exposes `quickXorHash`; do not design around `sha256Hash`, which is not supported there.
-- Nyx should keep a stronger local fingerprint and map it to OneDrive item IDs in the local catalog.
+### V4: Local Execution
 
-### GitHub
+- apply approved renames and moves
+- apply approved duplicate deletion
+- record audit and rollback metadata
 
-Use for code workflows only.
+### V5: Cloud Audit
 
-Rules:
+- Google Drive and OneDrive audit
+- cloud duplicate detection
+- cloud structure review
 
-- If the local folder is already a repository, skip and record the reason.
-- If the folder is not a repository, analyze the codebase shape and suggest repository creation.
-- Respect GitHub file and repository size constraints. Large binaries must not be pushed into normal Git history.
+### V6: Protection And Archive
 
-Implementation note:
+- redundant backup proof for important categories
+- cloud-only archival flow for lower-priority files
 
-- Repository creation should be a separate approval step, not an automatic side effect of discovering code.
+## Security And Safety
 
-## Duplicate Detection Model
-
-Nyx should determine existence in this order:
-
-1. Check local catalog for a prior provider match.
-2. If missing, check provider-native metadata or app metadata.
-3. If still uncertain, fall back to provider listing plus fingerprint comparison.
-4. Only upload when the evidence says the object is absent.
-
-Do not rely on:
-
-- filename equality
-- folder name equality
-- modified time alone
-
-## Folder Structure Strategy
-
-Folder placement needs explicit policy plus heuristics.
-
-Examples:
-
-- `resume`, `cv`, `cover-letter` -> `Resumes/`
-- source code by project root name -> repository suggestion, not generic folder creation on GitHub
-- camera photos -> `Photos/YYYY/MM/`
-- invoices -> `Finance/Invoices/YYYY/`
-- unknown files -> `Unsorted/`
-
-This should be rule-based first. Later, a semantic classifier can improve folder suggestions.
-
-## Local Data Model
-
-Use SQLite for the first persisted catalog.
-
-Suggested tables:
-
-### `watched_root`
-
-- `id`
-- `path`
-- `recursive`
-- `include_rules_json`
-- `exclude_rules_json`
-
-### `local_file`
-
-- `id`
-- `absolute_path`
-- `relative_path`
-- `size_bytes`
-- `sha256`
-- `md5`
-- `sha1`
-- `mime_type`
-- `extension`
-- `last_modified_at`
-- `category`
-- `folder_hint`
-- `git_repository_root`
-
-### `provider_account`
-
-- `id`
-- `provider`
-- `account_label`
-- `quota_total_bytes`
-- `quota_used_bytes`
-- `quota_free_bytes`
-- `last_quota_sync_at`
-- `status`
-
-### `provider_item`
-
-- `id`
-- `provider_account_id`
-- `provider_item_id`
-- `local_file_id`
-- `remote_path`
-- `provider_hash_json`
-- `last_verified_at`
-
-### `sync_job`
-
-- `id`
-- `local_file_id`
-- `provider_account_id`
-- `status`
-- `reason`
-- `attempt_count`
-- `scheduled_at`
-- `completed_at`
-
-### `advisory_event`
-
-- `id`
-- `kind`
-- `severity`
-- `title`
-- `details_json`
-- `created_at`
-- `acknowledged_at`
-
-## Event Flow
-
-### New File
-
-1. Watcher sees file create.
-2. Stability check waits until writes stop.
-3. Fingerprint service computes hashes.
-4. Repository detector checks for `.git`.
-5. Planner chooses one of:
-   - skip existing repository
-   - prompt to create repository
-   - upload to Google Drive
-   - upload to OneDrive
-   - defer because no provider has enough space
-6. Executor runs upload.
-7. Catalog is updated.
-
-### Periodic Advisory
-
-1. Refresh provider quotas.
-2. Detect accounts past warning threshold.
-3. Rank stale or low-value files by age, category, and replaceability.
-4. Compare projected growth to pricing catalog.
-5. Generate human review suggestions.
-
-## Phased Delivery Plan
-
-### Phase 0: Product Hardening
-
-- Lock directory allowlist rules.
-- Finalize file category taxonomy.
-- Finalize provider capability matrix.
-
-### Phase 1: Core Engine MVP
-
-- Config loading
-- local file scan
-- fingerprinting
-- classification
-- repository detection
-- in-memory planner
-
-### Phase 2: Persistence
-
-- SQLite catalog
-- file/provider/job tables
-- idempotent rescans
-
-### Phase 3: Storage Providers
-
-- Google Drive adapter
-- OneDrive adapter
-- quota refresh
-- provider duplicate lookup
-- folder creation and upload
-
-### Phase 4: Watch Mode
-
-- real-time watcher
-- job queue
-- retry policy
-- crash recovery
-
-### Phase 5: GitHub Workflow Support
-
-- code-folder analysis
-- repository suggestion
-- repository creation with approval
-- first commit bootstrap for non-repo code folders
-
-### Phase 6: Advisory Layer
-
-- quota warnings
-- stale file recommendations
-- growth forecasting
-- pricing and upgrade suggestions
-
-### Phase 7: Productization
-
-- desktop UI or web dashboard
-- OAuth account management
-- notifications
-- logs and diagnostics
-
-## Suggested Repository Structure
-
-```text
-nyx/
-  docs/
-    project-plan.md
-  schemas/
-    nyx-config.schema.json
-  src/
-    advisory/
-      pricing-catalog.js
-    core/
-      classify.js
-      fingerprint.js
-      planner.js
-      repository.js
-    providers/
-      mock-snapshots.js
-      provider-contract.js
-    cli.js
-  nyx.config.example.json
-  package.json
-  README.md
-```
-
-## Security and Compliance Notes
-
-- Store OAuth tokens securely using OS-backed credential storage when possible.
-- Never upload secrets from excluded folders.
-- Do not auto-delete local files from advisory logic.
-- Require explicit confirmation for repository creation and destructive actions.
-- Keep a clear audit log of every upload decision.
-
-## Current References
-
-Verified from official docs on 2026-04-17:
-
-- Google Drive API `about` and `files` resources for storage quota and `md5Checksum`
-- Google Drive file search and change tracking docs
-- Microsoft Graph `drive`, `driveItem`, `file`, `hashes`, and `delta` docs
-- GitHub repository contents, repository creation, blob APIs, and repository limits docs
-- Google One and Microsoft OneDrive pricing pages
+- never mutate files outside approved roots
+- never delete without explicit confirmation
+- never trust filenames alone for identity
+- keep an audit log for every proposed and applied action
+- treat cloud archival as destructive until verified otherwise
 
