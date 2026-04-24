@@ -37,6 +37,17 @@ User review:
 - Remove rules that are too aggressive for your files.
 - Expand the list only after reviewing real findings.
 
+## Default Exclusions
+
+Nyx should skip these path segments during audit unless the user explicitly removes them:
+
+- `.git`
+- `node_modules`
+- `Temp`
+- `packages`
+- `Drive`
+- `.nyx`
+
 ## Structured File Definition
 
 A file is considered structured only when all of the following are true:
@@ -114,4 +125,3 @@ Nyx must ask the user before:
 - deleting duplicates
 - deleting irrelevant files
 - deleting a local copy after confirmed cloud backup
-

@@ -28,6 +28,7 @@ The repository currently contains:
 - the engagement template for user-approved scan roots and approval rules
 - the product plan and roadmap
 - a local mock-drive scaffold for storage experiments
+- a local audit foundation for engagement parsing, duplicate detection, and structure scoring
 - verification tooling for quality, security, unit, and smoke checks
 
 The mock `Drive/` implementation is not the final product. It is a safe local scaffold used to validate file selection, routing, duplicate checks, and review gates before real cloud integrations are introduced.
@@ -38,6 +39,8 @@ The mock `Drive/` implementation is not the final product. It is a safe local sc
 node src/cli.js plan
 node src/cli.js doctor
 node src/cli.js demo
+node src/cli.js engagement-summary [engagement-path]
+node src/cli.js audit-local [engagement-path]
 node src/cli.js init-drive
 node src/cli.js drive-status
 node src/cli.js sync-file <file-path>
@@ -54,6 +57,7 @@ npm test
 ### Phase 1: Audit
 
 - scan only approved directories
+- parse engagement rules and default exclusions
 - fingerprint files
 - classify file types
 - detect duplicates
@@ -95,4 +99,3 @@ The scaffold is expected to pass:
 - `npm test`
 - `npm run test:smoke`
 - `npm audit --json`
-

@@ -8,6 +8,8 @@ import { fingerprintFile } from "./core/fingerprint.js";
 import { buildBackupPlan } from "./core/planner.js";
 import { scanWatchedDirectory } from "./core/scan.js";
 import { syncFileWithLocalDrive } from "./core/sync.js";
+import { loadEngagement } from "./engagement/parser.js";
+import { buildLocalAudit } from "./organization/local-audit.js";
 import { ensureLocalDriveScaffold, getLocalDriveStatus } from "./providers/local-drive.js";
 import { createMockProviderSnapshots } from "./providers/mock-snapshots.js";
 import { explainPricingStrategy } from "./advisory/pricing-catalog.js";
@@ -18,6 +20,8 @@ const handlers = {
   plan: printPlan,
   doctor: runDoctor,
   demo: runDemo,
+  "engagement-summary": runEngagementSummary,
+  "audit-local": runAuditLocal,
   "init-drive": runInitDrive,
   "drive-status": runDriveStatus,
   scan: runScan,
@@ -40,21 +44,21 @@ async function main() {
 }
 
 async function printPlan() {
-  console.log("Nyx initial build plan");
+  console.log("Nyx current plan");
   console.log("");
   console.log("Core lanes:");
-  console.log("- scanner and watcher");
-  console.log("- fingerprinting and classification");
-  console.log("- provider-aware planner");
-  console.log("- catalog and advisory engine");
+  console.log("- engagement-driven audit");
+  console.log("- duplicate and structure review");
+  console.log("- rename and folder proposals with approval");
+  console.log("- backup and archival after organization");
   console.log("");
   console.log("Important rules:");
-  console.log("- identify files by content fingerprint, not filename");
-  console.log("- use Google Drive and OneDrive for general storage");
-  console.log("- use GitHub only for code workflows");
-  console.log("- skip files already inside Git repositories");
+  console.log("- scan only user-approved directories");
+  console.log("- identify duplicates by content fingerprint");
+  console.log("- never rename, move, or delete without approval");
+  console.log("- verify cloud backup before local archival");
   console.log("");
-  console.log("Pricing strategy:");
+  console.log("Current advisory notes:");
   for (const line of explainPricingStrategy()) {
     console.log(`- ${line}`);
   }
@@ -74,6 +78,7 @@ async function runDoctor() {
   console.log(`- nyx.config.json: ${await exists(configPath) ? "present" : "missing"}`);
   console.log(`- nyx.config.example.json: ${await exists(exampleConfigPath) ? "present" : "missing"}`);
   console.log(`- mock Drive root: ${driveRoot}`);
+  console.log(`- engagement file: ${await exists(path.resolve("docs/engagement.md")) ? "present" : "missing"}`);
 }
 
 async function runInitDrive() {
@@ -119,6 +124,27 @@ async function runDemo() {
   });
 
   console.log(JSON.stringify(plan, null, 2));
+}
+
+async function runEngagementSummary(args) {
+  const engagementPath = args[0] ?? "docs/engagement.md";
+  console.log(JSON.stringify(await loadEngagement(engagementPath), null, 2));
+}
+
+async function runAuditLocal(args) {
+  const engagementPath = args[0] ?? "docs/engagement.md";
+  const audit = await buildLocalAudit({ engagementPath });
+
+  console.log(JSON.stringify({
+    engagementPath: audit.engagementPath,
+    managedDirectories: audit.managedDirectories,
+    exclusions: audit.exclusions,
+    missingDirectories: audit.missingDirectories,
+    totals: audit.totals,
+    duplicates: audit.duplicates,
+    weaklyStructuredFiles: audit.weaklyStructuredFiles.slice(0, 25),
+    unstructuredFiles: audit.unstructuredFiles.slice(0, 25)
+  }, null, 2));
 }
 
 async function runScan() {
@@ -209,6 +235,8 @@ function printUsage() {
   console.log("- plan");
   console.log("- doctor");
   console.log("- demo");
+  console.log("- engagement-summary [engagement-path]");
+  console.log("- audit-local [engagement-path]");
   console.log("- init-drive");
   console.log("- drive-status");
   console.log("- scan");
