@@ -29,6 +29,16 @@ Build a file organization system that audits user-approved local directories, id
 - create new folders only when no suitable destination exists
 - log every action for rollback and auditability
 
+Primary local-first command flow:
+
+```bash
+node src/cli.js audit-local
+node src/cli.js prepare-local-organization
+node src/cli.js local-organization-status
+node src/cli.js approve-local-organization <item-id>
+node src/cli.js apply-local-organization
+```
+
 ### 4. Cloud Audit And Organization
 
 - inspect supported cloud providers
@@ -184,14 +194,14 @@ SQLite remains the right first persistence layer for this.
 
 ## Delivery Plan
 
-### V1: Repository And Workflow Alignment
+### V1: Repository And Workflow Alignment - Implemented
 
 - engagement template
 - product docs
 - verification scripts
 - local mock-drive scaffold
 
-### V2: Local Audit Foundation
+### V2: Local Audit Foundation - Implemented
 
 - parse engagement rules
 - scan approved roots only
@@ -200,29 +210,33 @@ SQLite remains the right first persistence layer for this.
 - detect duplicates
 - report structured vs unstructured files
 
-### V3: Review And Organization Proposals
+### V3: Review And Organization Proposals - Implemented
 
 - rename proposal engine
 - folder proposal engine
 - irrelevance review engine
 - user approval queue
 
-### V4: Local Execution
+### V4: Local Execution - Implemented
 
 - apply approved renames and moves
 - apply approved duplicate deletion
 - record audit and rollback metadata
 
-### V5: Cloud Audit
+### V5: Cloud Audit - Mock Provider Implemented
 
 - Google Drive and OneDrive audit
 - cloud duplicate detection
 - cloud structure review
 
-### V6: Protection And Archive
+The current implementation audits the local mock Drive scaffold, includes backup proof on uploads and dedupe skips, and reports duplicate fingerprints across mock providers. Real Google Drive and OneDrive APIs are not implemented yet.
+
+### V6: Protection And Archive - Mock Provider Implemented
 
 - redundant backup proof for important categories
 - cloud-only archival flow for lower-priority files
+
+The current implementation plans protection against the local mock Drive scaffold, marks important files as protected only when verified backup proof exists, creates archive proposals for lower-priority files with verified backup proof, and removes local copies only after approval. Real provider archival remains future work.
 
 ## Security And Safety
 
@@ -231,4 +245,3 @@ SQLite remains the right first persistence layer for this.
 - never trust filenames alone for identity
 - keep an audit log for every proposed and applied action
 - treat cloud archival as destructive until verified otherwise
-

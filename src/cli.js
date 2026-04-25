@@ -9,7 +9,11 @@ import { buildBackupPlan } from "./core/planner.js";
 import { scanWatchedDirectory } from "./core/scan.js";
 import { syncFileWithLocalDrive } from "./core/sync.js";
 import { loadEngagement } from "./engagement/parser.js";
+import { buildCloudAudit } from "./organization/cloud-audit.js";
+import { applyApprovedReview } from "./organization/executor.js";
 import { buildLocalAudit } from "./organization/local-audit.js";
+import { buildProtectionPlan } from "./organization/protection.js";
+import { approveReviewItems, DEFAULT_REVIEW_PATH, loadReviewManifest, saveReviewManifest } from "./organization/review-store.js";
 import { ensureLocalDriveScaffold, getLocalDriveStatus } from "./providers/local-drive.js";
 import { createMockProviderSnapshots } from "./providers/mock-snapshots.js";
 import { explainPricingStrategy } from "./advisory/pricing-catalog.js";
@@ -22,6 +26,18 @@ const handlers = {
   demo: runDemo,
   "engagement-summary": runEngagementSummary,
   "audit-local": runAuditLocal,
+  "review-local": runReviewLocal,
+  "prepare-local-organization": runPrepareReview,
+  "local-organization-status": runReviewStatus,
+  "approve-local-organization": runApproveReview,
+  "apply-local-organization": runApplyReview,
+  "prepare-review": runPrepareReview,
+  "review-status": runReviewStatus,
+  "approve-review": runApproveReview,
+  "apply-review": runApplyReview,
+  "audit-cloud": runAuditCloud,
+  "plan-protection": runPlanProtection,
+  "prepare-archive": runPrepareArchive,
   "init-drive": runInitDrive,
   "drive-status": runDriveStatus,
   scan: runScan,
@@ -142,8 +158,133 @@ async function runAuditLocal(args) {
     missingDirectories: audit.missingDirectories,
     totals: audit.totals,
     duplicates: audit.duplicates,
+    reviewQueue: audit.reviewQueue.totals,
     weaklyStructuredFiles: audit.weaklyStructuredFiles.slice(0, 25),
     unstructuredFiles: audit.unstructuredFiles.slice(0, 25)
+  }, null, 2));
+}
+
+async function runReviewLocal(args) {
+  const engagementPath = args[0] ?? "docs/engagement.md";
+  const audit = await buildLocalAudit({ engagementPath });
+
+  console.log(JSON.stringify({
+    engagementPath: audit.engagementPath,
+    managedDirectories: audit.managedDirectories,
+    missingDirectories: audit.missingDirectories,
+    totals: audit.reviewQueue.totals,
+    items: audit.reviewQueue.items.slice(0, 50)
+  }, null, 2));
+}
+
+async function runPrepareReview(args) {
+  const engagementPath = args[0] ?? "docs/engagement.md";
+  const reviewPath = args[1] ?? DEFAULT_REVIEW_PATH;
+  const audit = await buildLocalAudit({ engagementPath });
+  const saved = await saveReviewManifest({ audit, reviewPath });
+
+  console.log(JSON.stringify({
+    reviewPath: saved.reviewPath,
+    totals: saved.manifest.totals,
+    nextSteps: [
+      `node src/cli.js local-organization-status ${saved.reviewPath}`,
+      `node src/cli.js approve-local-organization <item-id|all> ${saved.reviewPath}`,
+      `node src/cli.js apply-local-organization ${saved.reviewPath}`
+    ]
+  }, null, 2));
+}
+
+async function runReviewStatus(args) {
+  const reviewPath = args[0] ?? DEFAULT_REVIEW_PATH;
+  const loaded = await loadReviewManifest(reviewPath);
+  const items = loaded.manifest.items;
+
+  console.log(JSON.stringify({
+    reviewPath: loaded.reviewPath,
+    totals: {
+      pendingItems: items.filter((item) => !item.approved).length,
+      approvedItems: items.filter((item) => item.approved).length,
+      allItems: items.length
+    },
+    items: items.slice(0, 50).map((item) => {
+      return {
+        id: item.id,
+        action: item.action,
+        status: item.status,
+        approved: item.approved,
+        risk: item.risk,
+        subjectPath: item.subjectPath,
+        proposedPath: item.proposedPath,
+        proposedDeletePaths: item.proposedDeletePaths,
+        backupProof: item.backupProof
+      };
+    })
+  }, null, 2));
+}
+
+async function runApproveReview(args) {
+  const itemId = args[0];
+  const reviewPath = args[1] ?? DEFAULT_REVIEW_PATH;
+
+  if (!itemId) {
+    throw new Error("Usage: node src/cli.js approve-review <item-id|all> [review-path]");
+  }
+
+  const result = await approveReviewItems({
+    reviewPath,
+    itemIds: [itemId]
+  });
+
+  console.log(JSON.stringify({
+    reviewPath: result.reviewPath,
+    approvedCount: result.approvedCount
+  }, null, 2));
+}
+
+async function runApplyReview(args) {
+  const reviewPath = args[0] ?? DEFAULT_REVIEW_PATH;
+  const result = await applyApprovedReview({ reviewPath });
+
+  console.log(JSON.stringify(result, null, 2));
+}
+
+async function runAuditCloud(args) {
+  const configPath = args[0] ?? "nyx.config.json";
+  console.log(JSON.stringify(await buildCloudAudit({ configPath }), null, 2));
+}
+
+async function runPlanProtection(args) {
+  const engagementPath = args[0] ?? "docs/engagement.md";
+  const configPath = args[1] ?? "nyx.config.json";
+  const plan = await buildProtectionPlan({ engagementPath, configPath });
+
+  console.log(JSON.stringify({
+    engagementPath: plan.engagementPath,
+    configPath: plan.configPath,
+    driveRoot: plan.driveRoot,
+    managedDirectories: plan.managedDirectories,
+    totals: plan.totals,
+    reviewQueue: plan.reviewQueue.totals,
+    importantFiles: plan.importantFiles.slice(0, 50),
+    archiveProposals: plan.archiveProposals.slice(0, 50)
+  }, null, 2));
+}
+
+async function runPrepareArchive(args) {
+  const engagementPath = args[0] ?? "docs/engagement.md";
+  const configPath = args[1] ?? "nyx.config.json";
+  const reviewPath = args[2] ?? DEFAULT_REVIEW_PATH;
+  const plan = await buildProtectionPlan({ engagementPath, configPath });
+  const saved = await saveReviewManifest({ audit: plan, reviewPath });
+
+  console.log(JSON.stringify({
+    reviewPath: saved.reviewPath,
+    totals: saved.manifest.totals,
+    nextSteps: [
+      `node src/cli.js review-status ${saved.reviewPath}`,
+      `node src/cli.js approve-review <item-id|all> ${saved.reviewPath}`,
+      `node src/cli.js apply-review ${saved.reviewPath}`
+    ]
   }, null, 2));
 }
 
@@ -237,6 +378,18 @@ function printUsage() {
   console.log("- demo");
   console.log("- engagement-summary [engagement-path]");
   console.log("- audit-local [engagement-path]");
+  console.log("- review-local [engagement-path]");
+  console.log("- prepare-local-organization [engagement-path] [review-path]");
+  console.log("- local-organization-status [review-path]");
+  console.log("- approve-local-organization <item-id|all> [review-path]");
+  console.log("- apply-local-organization [review-path]");
+  console.log("- prepare-review [engagement-path] [review-path]");
+  console.log("- review-status [review-path]");
+  console.log("- approve-review <item-id|all> [review-path]");
+  console.log("- apply-review [review-path]");
+  console.log("- audit-cloud [config-path]");
+  console.log("- plan-protection [engagement-path] [config-path]");
+  console.log("- prepare-archive [engagement-path] [config-path] [review-path]");
   console.log("- init-drive");
   console.log("- drive-status");
   console.log("- scan");

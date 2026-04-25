@@ -6,6 +6,7 @@ import { findWatchedRootMatch } from "./watched-roots.js";
 import {
   buildProviderSnapshotsFromLocalDrive,
   ensureLocalDriveScaffold,
+  findBackupProofInLocalDrive,
   uploadFileToLocalDrive
 } from "../providers/local-drive.js";
 
@@ -55,8 +56,18 @@ export async function syncFileWithConfig({ filePath, configContext }) {
   });
 
   if (plan.action !== "upload") {
+    const backupProof = plan.selectedProvider
+      ? await findBackupProofInLocalDrive({
+        driveRoot,
+        providers: config.providers,
+        providerId: plan.selectedProvider,
+        fileProfile
+      })
+      : null;
+
     return {
       ...plan,
+      backupProof,
       watchedRoot: watchedMatch.rootPath,
       relativePath: watchedMatch.relativePath
     };

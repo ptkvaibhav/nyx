@@ -1,6 +1,9 @@
 import { fingerprintFile } from "../core/fingerprint.js";
 import { loadEngagement } from "../engagement/parser.js";
 import { findDuplicateGroups } from "./duplicates.js";
+import { findIrrelevanceFindings } from "./irrelevance.js";
+import { buildOrganizationProposals } from "./proposals.js";
+import { buildReviewQueue } from "./review-queue.js";
 import { scanManagedDirectories } from "./scan-managed.js";
 import { analyzeFileStructure } from "./structure.js";
 import { classifyFile } from "../core/classify.js";
@@ -34,6 +37,15 @@ export async function buildLocalAudit({ engagementPath = "docs/engagement.md" } 
   const structuredFiles = files.filter((file) => file.structure.status === "structured");
   const weaklyStructuredFiles = files.filter((file) => file.structure.status === "weakly_structured");
   const unstructuredFiles = files.filter((file) => file.structure.status === "unstructured");
+  const organizationProposals = buildOrganizationProposals(files);
+  const irrelevanceFindings = findIrrelevanceFindings({
+    duplicates,
+    configuredRules: engagement.safeIrrelevanceRules
+  });
+  const reviewQueue = buildReviewQueue({
+    organizationProposals,
+    irrelevanceFindings
+  });
 
   return {
     engagementPath: engagement.engagementPath,
@@ -46,7 +58,8 @@ export async function buildLocalAudit({ engagementPath = "docs/engagement.md" } 
       duplicateFiles: duplicates.reduce((total, group) => total + group.files.length, 0),
       structuredFiles: structuredFiles.length,
       weaklyStructuredFiles: weaklyStructuredFiles.length,
-      unstructuredFiles: unstructuredFiles.length
+      unstructuredFiles: unstructuredFiles.length,
+      reviewItems: reviewQueue.totals.pendingItems
     },
     rules: {
       configuredIrrelevanceRules: engagement.safeIrrelevanceRules,
@@ -56,6 +69,10 @@ export async function buildLocalAudit({ engagementPath = "docs/engagement.md" } 
       })
     },
     duplicates,
+    files,
+    organizationProposals,
+    irrelevanceFindings,
+    reviewQueue,
     structuredFiles: sortStructureFindings(structuredFiles),
     weaklyStructuredFiles: sortStructureFindings(weaklyStructuredFiles),
     unstructuredFiles: sortStructureFindings(unstructuredFiles)
@@ -80,4 +97,3 @@ function sortStructureFindings(files) {
     })
     .sort((left, right) => left.absolutePath.localeCompare(right.absolutePath));
 }
-

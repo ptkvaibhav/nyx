@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { syncFileWithConfig } from "../src/core/sync.js";
+import { buildCloudAudit } from "../src/organization/cloud-audit.js";
 import { getLocalDriveStatus } from "../src/providers/local-drive.js";
 
 test("uploads a document into the local Drive scaffold and dedupes by fingerprint", async () => {
@@ -29,6 +30,8 @@ test("uploads a document into the local Drive scaffold and dedupes by fingerprin
   assert.equal(firstResult.action, "upload");
   assert.equal(firstResult.selectedProvider, "googleDrive");
   assert.match(firstResult.storedPath, /Drive[\\/]+GoogleDrive[\\/]+Resumes[\\/]+abc_resume\.pdf$/);
+  assert.equal(firstResult.backupProof.provider, "googleDrive");
+  assert.match(firstResult.backupProof.sha256, /^[a-f0-9]{64}$/);
 
   const uploadedContent = await readFile(firstResult.storedPath, "utf8");
   assert.equal(uploadedContent, "resume-version-1");
@@ -40,6 +43,7 @@ test("uploads a document into the local Drive scaffold and dedupes by fingerprin
 
   assert.equal(secondResult.action, "skip");
   assert.equal(secondResult.selectedProvider, "googleDrive");
+  assert.equal(secondResult.backupProof.provider, "googleDrive");
 
   const status = await getLocalDriveStatus({
     driveRoot,
@@ -48,6 +52,36 @@ test("uploads a document into the local Drive scaffold and dedupes by fingerprin
 
   assert.equal(status.providers.googleDrive.fileCount, 1);
   assert.equal(status.providers.oneDrive.fileCount, 0);
+});
+
+test("audits the local Drive scaffold with provider totals", async () => {
+  const workspace = await mkdtemp(path.join(os.tmpdir(), "nyx-local-drive-"));
+  const sourceRoot = path.join(workspace, "source");
+  const driveRoot = path.join(workspace, "Drive");
+  const configPath = path.join(workspace, "nyx.config.json");
+  const resumePath = path.join(sourceRoot, "abc_resume.pdf");
+
+  await mkdir(sourceRoot, { recursive: true });
+  await writeFile(resumePath, "resume-version-1", "utf8");
+
+  const configContext = createConfigContext({
+    workspace,
+    sourceRoot,
+    driveRoot
+  });
+
+  await writeFile(configPath, JSON.stringify(configContext.config, null, 2), "utf8");
+  await syncFileWithConfig({
+    filePath: resumePath,
+    configContext
+  });
+
+  const audit = await buildCloudAudit({ configPath });
+
+  assert.equal(audit.totals.providers, 2);
+  assert.equal(audit.totals.files, 1);
+  assert.equal(audit.providers.googleDrive.fileCount, 1);
+  assert.equal(audit.duplicateGroups.length, 0);
 });
 
 test("routes to OneDrive when it has more mock free space than Google Drive", async () => {

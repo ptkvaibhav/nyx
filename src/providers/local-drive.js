@@ -73,7 +73,12 @@ export async function uploadFileToLocalDrive({
       action: "skip",
       reason: "Matching file fingerprint already exists in the local Drive scaffold.",
       selectedProvider: selectedProviderId,
-      storedPath: existingFile.storedPath
+      storedPath: existingFile.storedPath,
+      backupProof: buildBackupProof({
+        selectedProviderId,
+        storedPath: existingFile.storedPath,
+        fileProfile
+      })
     };
   }
 
@@ -98,7 +103,8 @@ export async function uploadFileToLocalDrive({
     baseName: fileProfile.baseName,
     originalPath: sourcePath,
     storedPath: targetPath,
-    uploadedAt: new Date().toISOString()
+    uploadedAt: new Date().toISOString(),
+    verifiedAt: new Date().toISOString()
   });
 
   state.updatedAt = new Date().toISOString();
@@ -107,7 +113,12 @@ export async function uploadFileToLocalDrive({
   return {
     action: "upload",
     selectedProvider: selectedProviderId,
-    storedPath: targetPath
+    storedPath: targetPath,
+    backupProof: buildBackupProof({
+      selectedProviderId,
+      storedPath: targetPath,
+      fileProfile
+    })
   };
 }
 
@@ -131,6 +142,23 @@ export async function getLocalDriveStatus({ driveRoot, providers }) {
       })
     )
   };
+}
+
+export async function findBackupProofInLocalDrive({ driveRoot, providers, providerId, fileProfile }) {
+  const state = await loadLocalDriveState({ driveRoot, providers });
+  const providerState = state.providers[providerId];
+  const existingFile = providerState?.files.find((file) => file.sha256 === fileProfile.sha256);
+
+  if (!existingFile) {
+    return null;
+  }
+
+  return buildBackupProof({
+    selectedProviderId: providerId,
+    storedPath: existingFile.storedPath,
+    fileProfile,
+    verifiedAt: existingFile.verifiedAt ?? existingFile.uploadedAt
+  });
 }
 
 function createDefaultState(providers) {
@@ -190,6 +218,16 @@ async function resolveTargetFileName({ targetDirectory, baseName, sha256 }) {
 
   const parsed = path.parse(baseName);
   return `${parsed.name}-${sha256.slice(0, 8)}${parsed.ext}`;
+}
+
+function buildBackupProof({ selectedProviderId, storedPath, fileProfile, verifiedAt = new Date().toISOString() }) {
+  return {
+    provider: selectedProviderId,
+    storedPath,
+    sha256: fileProfile.sha256,
+    sizeBytes: fileProfile.sizeBytes,
+    verifiedAt
+  };
 }
 
 async function exists(targetPath) {
