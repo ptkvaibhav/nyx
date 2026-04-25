@@ -29,6 +29,10 @@ The repository currently contains:
 - the product plan and roadmap
 - a local mock-drive scaffold for storage experiments
 - a local audit foundation for engagement parsing, duplicate detection, and structure scoring
+- a preview-only review queue for duplicate findings and move or rename proposals
+- an approval-gated execution flow with audit log and rollback metadata
+- a mock cloud audit with backup proof for local Drive uploads
+- a mock-provider protection and archive planner with approval-gated local-copy archival
 - verification tooling for quality, security, unit, and smoke checks
 
 The mock `Drive/` implementation is not the final product. It is a safe local scaffold used to validate file selection, routing, duplicate checks, and review gates before real cloud integrations are introduced.
@@ -41,6 +45,18 @@ node src/cli.js doctor
 node src/cli.js demo
 node src/cli.js engagement-summary [engagement-path]
 node src/cli.js audit-local [engagement-path]
+node src/cli.js review-local [engagement-path]
+node src/cli.js prepare-local-organization [engagement-path] [review-path]
+node src/cli.js local-organization-status [review-path]
+node src/cli.js approve-local-organization <item-id|all> [review-path]
+node src/cli.js apply-local-organization [review-path]
+node src/cli.js prepare-review [engagement-path] [review-path]
+node src/cli.js review-status [review-path]
+node src/cli.js approve-review <item-id|all> [review-path]
+node src/cli.js apply-review [review-path]
+node src/cli.js audit-cloud [config-path]
+node src/cli.js plan-protection [engagement-path] [config-path]
+node src/cli.js prepare-archive [engagement-path] [config-path] [review-path]
 node src/cli.js init-drive
 node src/cli.js drive-status
 node src/cli.js sync-file <file-path>
@@ -64,24 +80,50 @@ npm test
 - flag stale or safe irrelevance candidates
 - score structured vs unstructured files
 
-### Phase 2: Organize
+### Phase 2: Local Organization
 
 - propose folder destinations
 - propose filename changes per category naming rules
 - show evidence for each move or rename
 - execute only after user approval
+- write execution results to `.nyx/audit-log.jsonl`
+- include rollback metadata for applied renames and moves
+
+Recommended local-first workflow:
+
+```bash
+node src/cli.js audit-local
+node src/cli.js prepare-local-organization
+node src/cli.js local-organization-status
+node src/cli.js approve-local-organization <item-id>
+node src/cli.js apply-local-organization
+```
 
 ### Phase 3: Cloud Audit
 
 - inspect connected cloud storage
 - detect duplicates and structure problems there too
 - reconcile local and cloud structure
+- current implementation audits the local mock Drive scaffold
+- real Google Drive and OneDrive APIs remain future provider work
 
 ### Phase 4: Protect And Archive
 
 - back up important categories redundantly
 - verify backup proof
 - move low-priority content to cloud-only storage when approved
+- current implementation plans against the local mock Drive scaffold and applies only approved archival proposals
+
+Recommended protection workflow:
+
+```bash
+node src/cli.js sync-file <lower-priority-file>
+node src/cli.js plan-protection
+node src/cli.js prepare-archive
+node src/cli.js review-status
+node src/cli.js approve-review <item-id>
+node src/cli.js apply-review
+```
 
 ## Key Documents
 

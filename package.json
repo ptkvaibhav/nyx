@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Quota-aware local-to-cloud backup router",
+  "description": "Approval-gated local file organization and mock cloud protection tool",
   "engines": {
     "node": ">=22"
   },

@@ -76,6 +76,9 @@ Important folder candidates once structure exists:
   assert.equal(audit.totals.structuredFiles, 1);
   assert.equal(audit.totals.weaklyStructuredFiles, 1);
   assert.equal(audit.totals.unstructuredFiles, 3);
+  assert.equal(audit.reviewQueue.totals.irrelevanceFindings, 1);
+  assert.ok(audit.reviewQueue.totals.organizationProposals > 0);
+  assert.equal(audit.reviewQueue.items.every((item) => item.status === "pending_user_approval"), true);
 
   const structuredResume = audit.structuredFiles.find((file) => file.relativePath === "Resumes/John_Resume.pdf");
   assert.ok(structuredResume);
