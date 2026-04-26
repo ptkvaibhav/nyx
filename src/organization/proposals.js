@@ -1,4 +1,5 @@
 import path from "node:path";
+import { isEligibleForLocalOrganization } from "./eligibility.js";
 
 const PURPOSE_LABELS = {
   resume: "Resume",
@@ -17,7 +18,9 @@ const PURPOSE_LABELS = {
 };
 
 export function buildOrganizationProposals(files = []) {
-  return files.flatMap((file) => {
+  return files
+    .filter((file) => isEligibleForLocalOrganization(file))
+    .flatMap((file) => {
     const proposals = [];
 
     if (file.structure?.moveRecommended) {
@@ -32,7 +35,8 @@ export function buildOrganizationProposals(files = []) {
     }
 
     return proposals;
-  }).sort((left, right) => left.id.localeCompare(right.id));
+  })
+    .sort((left, right) => left.id.localeCompare(right.id));
 }
 
 function buildMoveProposal(file) {

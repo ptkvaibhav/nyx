@@ -1,7 +1,8 @@
 import path from "node:path";
+import { inferPurposeDetails } from "../organization/purpose-rules.js";
 
 const EXTENSION_RULES = {
-  document: new Set([".pdf", ".doc", ".docx", ".txt", ".rtf", ".odt", ".md", ".mdx"]),
+  document: new Set([".pdf", ".doc", ".docx", ".txt", ".rtf", ".odt", ".md", ".mdx", ".csv", ".xls", ".xlsx", ".epub"]),
   image: new Set([".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic", ".svg"]),
   video: new Set([".mp4", ".mov", ".mkv", ".avi", ".webm"]),
   archive: new Set([".zip", ".rar", ".7z", ".tar", ".gz"]),
@@ -48,7 +49,12 @@ export function classifyFile(fileProfile) {
   const baseName = (fileProfile.baseName ?? path.basename(fileProfile.absolutePath ?? "")).toLowerCase();
 
   const category = detectCategory(extension);
-  const folderSegments = inferFolderSegments(baseName, category);
+  const folderSegments = inferPurposeDetails({
+    absolutePath: fileProfile.absolutePath,
+    baseName,
+    extension,
+    category
+  }).expectedFolders;
 
   return {
     category,
@@ -65,36 +71,4 @@ function detectCategory(extension) {
   }
 
   return "other";
-}
-
-function inferFolderSegments(baseName, category) {
-  if (/(resume|cv|cover-letter)/i.test(baseName)) {
-    return ["Resumes"];
-  }
-
-  if (/(invoice|receipt|tax|payslip)/i.test(baseName)) {
-    return ["Finance"];
-  }
-
-  if (category === "image") {
-    return ["Photos"];
-  }
-
-  if (category === "video") {
-    return ["Videos"];
-  }
-
-  if (category === "archive") {
-    return ["Archives"];
-  }
-
-  if (category === "document") {
-    return ["Documents"];
-  }
-
-  if (category === "code") {
-    return ["Code"];
-  }
-
-  return ["Unsorted"];
 }

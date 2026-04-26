@@ -1,7 +1,7 @@
 {
   "watchedDirectories": [
     {
-      "path": "C:/Users/ptkva",
+      "path": "C:/Users/ptkva/Documents/nyx/File",
       "recursive": true,
       "include": [
         "**/*"

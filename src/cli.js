@@ -27,7 +27,7 @@ const handlers = {
   "engagement-summary": runEngagementSummary,
   "audit-local": runAuditLocal,
   "review-local": runReviewLocal,
-  "prepare-local-organization": runPrepareReview,
+  "prepare-local-organization": runPrepareLocalOrganization,
   "local-organization-status": runReviewStatus,
   "approve-local-organization": runApproveReview,
   "apply-local-organization": runApplyReview,
@@ -174,6 +174,27 @@ async function runReviewLocal(args) {
     missingDirectories: audit.missingDirectories,
     totals: audit.reviewQueue.totals,
     items: audit.reviewQueue.items.slice(0, 50)
+  }, null, 2));
+}
+
+async function runPrepareLocalOrganization(args) {
+  const engagementPath = args[0] ?? "docs/engagement.md";
+  const reviewPath = args[1] ?? DEFAULT_REVIEW_PATH;
+  const audit = await buildLocalAudit({ engagementPath });
+  const saved = await saveReviewManifest({
+    audit,
+    reviewPath,
+    reviewItems: audit.organizationProposals
+  });
+
+  console.log(JSON.stringify({
+    reviewPath: saved.reviewPath,
+    totals: saved.manifest.totals,
+    nextSteps: [
+      `node src/cli.js local-organization-status ${saved.reviewPath}`,
+      `node src/cli.js approve-local-organization <item-id|all> ${saved.reviewPath}`,
+      `node src/cli.js apply-local-organization ${saved.reviewPath}`
+    ]
   }, null, 2));
 }
 

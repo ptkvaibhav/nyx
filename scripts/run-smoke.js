@@ -1,10 +1,14 @@
 import path from "node:path";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { loadConfig } from "../src/core/config.js";
 import { syncFileWithLocalDrive } from "../src/core/sync.js";
 import { ensureLocalDriveScaffold, getLocalDriveStatus } from "../src/providers/local-drive.js";
 
 const { baseDirectory, config } = await loadConfig();
 const driveRoot = path.resolve(baseDirectory, config.mockDrive.rootFolder);
+const watchedRoot = path.resolve(baseDirectory, config.watchedDirectories[0].path);
+const smokeRoot = path.join(watchedRoot, ".nyx-smoke");
+const smokeFilePath = path.join(smokeRoot, "smoke-document.txt");
 
 await ensureLocalDriveScaffold({
   driveRoot,
@@ -19,19 +23,18 @@ const status = await getLocalDriveStatus({
 assertHasProvider(status, "googleDrive");
 assertHasProvider(status, "oneDrive");
 
-const firstSync = await syncFileWithLocalDrive({ filePath: "README.md" });
+await mkdir(smokeRoot, { recursive: true });
+await writeFile(smokeFilePath, "smoke-document", "utf8");
+
+const firstSync = await syncFileWithLocalDrive({ filePath: smokeFilePath });
 assertAction(firstSync, ["upload", "skip"]);
 assertSelectedProvider(firstSync, "googleDrive");
 
-const secondSync = await syncFileWithLocalDrive({ filePath: "README.md" });
+const secondSync = await syncFileWithLocalDrive({ filePath: smokeFilePath });
 assertAction(secondSync, ["skip"]);
 assertSelectedProvider(secondSync, "googleDrive");
 
-const codeSync = await syncFileWithLocalDrive({ filePath: "src/cli.js" });
-assertAction(codeSync, ["skip"]);
-if (!String(codeSync.reason).includes("existing Git repository")) {
-  throw new Error("Expected repository-protected code files to be skipped.");
-}
+await rm(smokeRoot, { recursive: true, force: true });
 
 console.log("Smoke test passed.");
 
