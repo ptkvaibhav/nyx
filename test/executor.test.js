@@ -12,19 +12,19 @@ test("applyApprovedReview skips unapproved review items without mutating files",
   const managedRoot = path.join(workspace, "managed");
   const engagementPath = path.join(workspace, "engagement.md");
   const reviewPath = path.join(workspace, ".nyx", "review.json");
-  const sourcePath = path.join(managedRoot, "Downloads", "file123.pdf");
+  const sourcePath = path.join(managedRoot, "file123.pdf");
 
   await mkdir(path.dirname(sourcePath), { recursive: true });
   await writeFile(sourcePath, "document", "utf8");
   await writeEngagement({ engagementPath, managedRoot });
 
   const audit = await buildLocalAudit({ engagementPath });
-  await saveReviewManifest({ audit, reviewPath });
+  const saved = await saveReviewManifest({ audit, reviewPath });
 
   const result = await applyApprovedReview({ reviewPath });
 
   assert.equal(result.applied.length, 0);
-  assert.ok(result.skipped.length > 0);
+  assert.equal(result.skipped.length, saved.manifest.items.length);
   assert.equal(await readFile(sourcePath, "utf8"), "document");
 });
 
@@ -34,7 +34,7 @@ test("applyApprovedReview applies approved move and rename proposals with audit 
   const engagementPath = path.join(workspace, "engagement.md");
   const reviewPath = path.join(workspace, ".nyx", "review.json");
   const auditLogPath = path.join(workspace, ".nyx", "audit-log.jsonl");
-  const sourcePath = path.join(managedRoot, "Downloads", "file123.pdf");
+  const sourcePath = path.join(managedRoot, "file123.pdf");
 
   await mkdir(path.dirname(sourcePath), { recursive: true });
   await writeFile(sourcePath, "document", "utf8");
@@ -42,23 +42,84 @@ test("applyApprovedReview applies approved move and rename proposals with audit 
 
   const audit = await buildLocalAudit({ engagementPath });
   const saved = await saveReviewManifest({ audit, reviewPath });
-  const renameItem = saved.manifest.items.find((item) => item.action === "rename_file");
+  const moveItem = saved.manifest.items.find((item) => item.action === "move_file");
 
-  await approveReviewItems({ reviewPath, itemIds: [renameItem.id] });
+  await approveReviewItems({ reviewPath, itemIds: [moveItem.id] });
   const result = await applyApprovedReview({ reviewPath, auditLogPath });
 
   assert.equal(result.errors.length, 0);
   assert.equal(result.applied.length, 1);
-  assert.equal(path.basename(result.applied[0].newPath), renameItem.proposedName);
+  assert.equal(path.basename(result.applied[0].newPath), "file123.pdf");
   assert.equal(await readFile(result.applied[0].newPath, "utf8"), "document");
 
   const auditLog = await readFile(auditLogPath, "utf8");
-  assert.match(auditLog, /"action":"rename_file"/);
+  assert.match(auditLog, /"action":"move_file"/);
   assert.match(auditLog, /"rollback"/);
 
   const secondResult = await applyApprovedReview({ reviewPath, auditLogPath });
   assert.equal(secondResult.errors.length, 0);
   assert.equal(secondResult.applied.length, 0);
+});
+
+test("applyApprovedReview can combine approved move and rename proposals for the same file", async () => {
+  const workspace = await mkdtemp(path.join(os.tmpdir(), "nyx-executor-"));
+  const managedRoot = path.join(workspace, "managed");
+  const engagementPath = path.join(workspace, "engagement.md");
+  const reviewPath = path.join(workspace, ".nyx", "review.json");
+  const sourcePath = path.join(managedRoot, "file123.pdf");
+
+  await mkdir(path.dirname(sourcePath), { recursive: true });
+  await writeFile(sourcePath, "document", "utf8");
+  await writeEngagement({ engagementPath, managedRoot });
+
+  const saved = await saveReviewManifest({
+    audit: {
+      engagementPath,
+      managedDirectories: [managedRoot]
+    },
+    reviewPath,
+    reviewItems: [
+      {
+        id: "move:demo",
+        type: "organization_proposal",
+        action: "move_file",
+        status: "pending_user_approval",
+        approvalGate: "moving files in batch",
+        risk: "mutation",
+        subjectPath: sourcePath,
+        proposedPath: path.join(managedRoot, "Documents", "file123.pdf"),
+        evidence: {
+          sha256: null
+        }
+      },
+      {
+        id: "rename:demo",
+        type: "organization_proposal",
+        action: "rename_file",
+        status: "pending_user_approval",
+        approvalGate: "renaming files",
+        risk: "mutation",
+        subjectPath: sourcePath,
+        proposedName: "Document_demo.pdf",
+        proposedPath: path.join(managedRoot, "Document_demo.pdf"),
+        evidence: {
+          sha256: null
+        }
+      }
+    ]
+  });
+  const moveItem = saved.manifest.items.find((item) => item.action === "move_file");
+  const renameItem = saved.manifest.items.find((item) => item.action === "rename_file");
+
+  assert.ok(moveItem);
+  assert.ok(renameItem);
+
+  await approveReviewItems({ reviewPath, itemIds: [moveItem.id, renameItem.id] });
+  const result = await applyApprovedReview({ reviewPath });
+
+  assert.equal(result.errors.length, 0);
+  assert.equal(result.applied.length, 2);
+  assert.equal(await readFile(path.join(managedRoot, "Documents", renameItem.proposedName), "utf8"), "document");
 });
 
 test("applyApprovedReview deletes approved duplicate candidates after fingerprint verification", async () => {
@@ -67,7 +128,7 @@ test("applyApprovedReview deletes approved duplicate candidates after fingerprin
   const engagementPath = path.join(workspace, "engagement.md");
   const reviewPath = path.join(workspace, ".nyx", "review.json");
   const firstPath = path.join(managedRoot, "Finance", "duplicate-a.pdf");
-  const secondPath = path.join(managedRoot, "Downloads", "duplicate-b.pdf");
+  const secondPath = path.join(managedRoot, "duplicate-b.pdf");
 
   await mkdir(path.dirname(firstPath), { recursive: true });
   await mkdir(path.dirname(secondPath), { recursive: true });

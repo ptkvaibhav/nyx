@@ -1,9 +1,11 @@
+import { isEligibleDuplicateGroup } from "./eligibility.js";
+
 export function findIrrelevanceFindings({ duplicates = [], configuredRules = [] } = {}) {
   const normalizedRules = configuredRules.map((rule) => rule.toLowerCase());
   const findings = [];
 
   if (normalizedRules.includes("exact duplicate files by content hash")) {
-    findings.push(...duplicates.map(buildDuplicateFinding));
+    findings.push(...duplicates.filter(isEligibleDuplicateGroup).map(buildDuplicateFinding));
   }
 
   return findings.sort((left, right) => left.id.localeCompare(right.id));

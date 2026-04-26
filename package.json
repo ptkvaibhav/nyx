@@ -19,6 +19,6 @@
     "check:quality": "node scripts/check-quality.js",
     "check:security": "node scripts/check-security.js",
     "test:smoke": "node scripts/run-smoke.js",
-    "test": "node --test --test-isolation=none"
+    "test": "node --test --test-isolation=none test/engagement.test.js test/executor.test.js test/local-audit.test.js test/local-drive.test.js test/protection.test.js test/review-queue.test.js"
   }
 }

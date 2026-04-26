@@ -13,6 +13,7 @@ export async function applyApprovedReview({ reviewPath, auditLogPath = DEFAULT_A
   const engagement = await loadEngagement(manifest.engagementPath);
   const managedRoots = engagement.managedDirectories.map((root) => path.resolve(root));
   const approvedItems = manifest.items.filter((item) => item.approved === true && item.status === "approved");
+  const pathRedirects = new Map();
   const result = {
     reviewPath: resolvedReviewPath,
     auditLogPath: path.resolve(auditLogPath),
@@ -23,7 +24,7 @@ export async function applyApprovedReview({ reviewPath, auditLogPath = DEFAULT_A
 
   for (const item of approvedItems) {
     try {
-      const appliedItem = await applyReviewItem({ item, managedRoots });
+      const appliedItem = await applyReviewItem({ item, managedRoots, pathRedirects });
       result.applied.push(appliedItem);
       markItemApplied({
         manifest,
@@ -80,9 +81,9 @@ function markItemApplied({ manifest, itemId, appliedItem }) {
   });
 }
 
-async function applyReviewItem({ item, managedRoots }) {
+async function applyReviewItem({ item, managedRoots, pathRedirects }) {
   if (item.action === "move_file" || item.action === "rename_file") {
-    return applyPathMutation({ item, managedRoots });
+    return applyPathMutation({ item, managedRoots, pathRedirects });
   }
 
   if (item.action === "review_duplicate_deletion") {
@@ -96,9 +97,10 @@ async function applyReviewItem({ item, managedRoots }) {
   throw new Error(`Unsupported review action: ${item.action}`);
 }
 
-async function applyPathMutation({ item, managedRoots }) {
-  const sourcePath = path.resolve(item.subjectPath);
-  const targetPath = path.resolve(item.proposedPath);
+async function applyPathMutation({ item, managedRoots, pathRedirects }) {
+  const originalSourcePath = path.resolve(item.subjectPath);
+  const sourcePath = resolveCurrentPath(originalSourcePath, pathRedirects);
+  const targetPath = resolveTargetPath({ item, sourcePath });
 
   assertInsideManagedRoots(sourcePath, managedRoots);
   assertInsideManagedRoots(targetPath, managedRoots);
@@ -110,6 +112,7 @@ async function applyPathMutation({ item, managedRoots }) {
 
   await mkdir(path.dirname(targetPath), { recursive: true });
   await rename(sourcePath, targetPath);
+  pathRedirects.set(originalSourcePath, targetPath);
 
   return {
     itemId: item.id,
@@ -214,4 +217,16 @@ async function exists(targetPath) {
   } catch {
     return false;
   }
+}
+
+function resolveCurrentPath(sourcePath, pathRedirects) {
+  return pathRedirects.get(sourcePath) ?? sourcePath;
+}
+
+function resolveTargetPath({ item, sourcePath }) {
+  if (item.action === "rename_file") {
+    return path.resolve(path.dirname(sourcePath), item.proposedName);
+  }
+
+  return path.resolve(item.proposedPath);
 }

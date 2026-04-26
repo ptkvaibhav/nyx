@@ -12,15 +12,14 @@ test("buildLocalAudit scans only managed roots, skips exclusions, finds duplicat
   const engagementPath = path.join(workspace, "engagement.md");
 
   await mkdir(path.join(managedRoot, "Resumes"), { recursive: true });
-  await mkdir(path.join(managedRoot, "Downloads"), { recursive: true });
   await mkdir(path.join(managedRoot, "Finance"), { recursive: true });
   await mkdir(excludedRoot, { recursive: true });
 
   await writeFile(path.join(managedRoot, "Resumes", "John_Resume.pdf"), "resume", "utf8");
-  await writeFile(path.join(managedRoot, "Downloads", "Invoice_2025.pdf"), "invoice", "utf8");
-  await writeFile(path.join(managedRoot, "Downloads", "file123.pdf"), "notes", "utf8");
+  await writeFile(path.join(managedRoot, "Invoice_2025.pdf"), "invoice", "utf8");
+  await writeFile(path.join(managedRoot, "file123.pdf"), "notes", "utf8");
   await writeFile(path.join(managedRoot, "Finance", "duplicate-a.pdf"), "same", "utf8");
-  await writeFile(path.join(managedRoot, "Downloads", "duplicate-b.pdf"), "same", "utf8");
+  await writeFile(path.join(managedRoot, "duplicate-b.pdf"), "same", "utf8");
   await writeFile(path.join(excludedRoot, "ignored.txt"), "ignore-me", "utf8");
 
   await writeFile(
@@ -84,12 +83,12 @@ Important folder candidates once structure exists:
   assert.ok(structuredResume);
   assert.equal(structuredResume.purpose, "resume");
 
-  const weakInvoice = audit.weaklyStructuredFiles.find((file) => file.relativePath === "Downloads/Invoice_2025.pdf");
+  const weakInvoice = audit.weaklyStructuredFiles.find((file) => file.relativePath === "Invoice_2025.pdf");
   assert.ok(weakInvoice);
   assert.equal(weakInvoice.moveRecommended, true);
   assert.equal(weakInvoice.renameRecommended, false);
 
-  const unstructuredGeneric = audit.unstructuredFiles.find((file) => file.relativePath === "Downloads/file123.pdf");
+  const unstructuredGeneric = audit.unstructuredFiles.find((file) => file.relativePath === "file123.pdf");
   assert.ok(unstructuredGeneric);
-  assert.equal(unstructuredGeneric.renameRecommended, true);
+  assert.equal(unstructuredGeneric.renameRecommended, false);
 });

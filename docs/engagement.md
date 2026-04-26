@@ -10,7 +10,7 @@ Nyx must only scan directories listed here. All other paths are out of scope and
 
 Current selection:
 
-- `C:\Users\ptkva`
+- `C:\Users\ptkva\Documents\nyx\File`
 
 User notes:
 

@@ -3,20 +3,25 @@ import path from "node:path";
 
 export const DEFAULT_REVIEW_PATH = ".nyx/review-queue.json";
 
-export async function saveReviewManifest({ audit, reviewPath = DEFAULT_REVIEW_PATH } = {}) {
+export async function saveReviewManifest({
+  audit,
+  reviewPath = DEFAULT_REVIEW_PATH,
+  reviewItems = audit?.reviewQueue?.items
+} = {}) {
   const resolvedPath = path.resolve(reviewPath);
+  const items = (reviewItems ?? []).map((item) => {
+    return {
+      ...item,
+      approved: false
+    };
+  });
   const manifest = {
     version: 1,
     createdAt: new Date().toISOString(),
     engagementPath: audit.engagementPath,
     managedDirectories: audit.managedDirectories,
-    totals: audit.reviewQueue.totals,
-    items: audit.reviewQueue.items.map((item) => {
-      return {
-        ...item,
-        approved: false
-      };
-    })
+    totals: summarizeReviewItems(items),
+    items
   };
 
   await mkdir(path.dirname(resolvedPath), { recursive: true });
@@ -90,5 +95,16 @@ export async function approveReviewItems({ reviewPath = DEFAULT_REVIEW_PATH, ite
     reviewPath: loaded.reviewPath,
     approvedCount: items.filter((item) => item.approved).length,
     manifest
+  };
+}
+
+function summarizeReviewItems(items) {
+  return {
+    pendingItems: items.length,
+    organizationProposals: items.filter((item) => item.type === "organization_proposal").length,
+    irrelevanceFindings: items.filter((item) => item.type === "irrelevance_finding").length,
+    archiveProposals: items.filter((item) => item.type === "protection_archive_proposal").length,
+    destructiveItems: items.filter((item) => item.risk === "destructive").length,
+    mutationItems: items.filter((item) => item.risk === "mutation").length
   };
 }
