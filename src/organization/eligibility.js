@@ -46,6 +46,7 @@ export function isEligibleForLocalOrganization(fileOrRelativePath) {
     return false;
   }
 
+  // Skip hidden system files (starts with ._) and common build/system directories
   if (segments.some((segment) => segment.startsWith("._") || SKIPPED_SEGMENTS.has(segment))) {
     return false;
   }
@@ -55,11 +56,10 @@ export function isEligibleForLocalOrganization(fileOrRelativePath) {
     return false;
   }
 
-  if (segments.length === 1) {
-    return true;
-  }
-
-  return segments.length === 2 && CATEGORY_ROOTS.has(segments[0]);
+  // Any file in a managed directory that isn't excluded by the above rules is eligible.
+  // We don't limit by segment length anymore because users might have deep structures
+  // that they want Nyx to help organize.
+  return true;
 }
 
 export function isEligibleDuplicateGroup(group) {
