@@ -8,14 +8,20 @@ import { hasVerifiedBackupProof } from "./protection.js";
 
 const DEFAULT_AUDIT_LOG_PATH = ".nyx/audit-log.jsonl";
 
-export async function applyApprovedReview({ reviewPath, auditLogPath = DEFAULT_AUDIT_LOG_PATH } = {}) {
-  const { reviewPath: resolvedReviewPath, manifest } = await loadReviewManifest(reviewPath);
-  const engagement = await loadEngagement(manifest.engagementPath);
+export async function applyApprovedReview({ 
+  catalog,
+  engagementPath = "docs/engagement.md", 
+  auditLogPath = DEFAULT_AUDIT_LOG_PATH 
+} = {}) {
+  const engagement = await loadEngagement(engagementPath);
   const managedRoots = engagement.managedDirectories.map((root) => path.resolve(root));
-  const approvedItems = manifest.items.filter((item) => item.approved === true && item.status === "approved");
+  
+  const allPendingItems = catalog.getPendingReviewItems();
+  const approvedItems = allPendingItems.filter((item) => item.approved === true && item.status === "approved");
+  
   const pathRedirects = new Map();
   const result = {
-    reviewPath: resolvedReviewPath,
+    dbPath: catalog.db.name,
     auditLogPath: path.resolve(auditLogPath),
     applied: [],
     skipped: [],
@@ -26,16 +32,14 @@ export async function applyApprovedReview({ reviewPath, auditLogPath = DEFAULT_A
     try {
       const appliedItem = await applyReviewItem({ item, managedRoots, pathRedirects });
       result.applied.push(appliedItem);
-      markItemApplied({
-        manifest,
-        itemId: item.id,
-        appliedItem
-      });
+      
+      catalog.markReviewItemApplied(item.id, appliedItem);
+
       await appendAuditEntry({
         auditLogPath,
         entry: {
           ...appliedItem,
-          reviewPath: resolvedReviewPath
+          dbPath: catalog.db.name
         }
       });
     } catch (error) {
@@ -46,15 +50,8 @@ export async function applyApprovedReview({ reviewPath, auditLogPath = DEFAULT_A
     }
   }
 
-  await writeReviewManifest({
-    reviewPath: resolvedReviewPath,
-    manifest: {
-      ...manifest,
-      updatedAt: new Date().toISOString()
-    }
-  });
-
-  const blockedItems = manifest.items.filter((item) => item.approved !== true && item.status !== "applied");
+  const remainingItems = catalog.getPendingReviewItems();
+  const blockedItems = remainingItems.filter((item) => item.approved !== true && item.status !== "applied");
   result.skipped.push(...blockedItems.map((item) => {
     return {
       itemId: item.id,
@@ -63,22 +60,6 @@ export async function applyApprovedReview({ reviewPath, auditLogPath = DEFAULT_A
   }));
 
   return result;
-}
-
-function markItemApplied({ manifest, itemId, appliedItem }) {
-  manifest.items = manifest.items.map((item) => {
-    if (item.id !== itemId) {
-      return item;
-    }
-
-    return {
-      ...item,
-      status: "applied",
-      applied: true,
-      appliedAt: appliedItem.appliedAt,
-      appliedResult: appliedItem
-    };
-  });
 }
 
 async function applyReviewItem({ item, managedRoots, pathRedirects }) {

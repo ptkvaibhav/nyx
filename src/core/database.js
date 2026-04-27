@@ -42,7 +42,7 @@ export async function initializeDatabase(dbPath = DEFAULT_DB_PATH) {
       status TEXT NOT NULL,
       approved BOOLEAN DEFAULT 0,
       risk TEXT,
-      subject_path TEXT NOT NULL,
+      subject_path TEXT,
       proposed_path TEXT,
       proposed_name TEXT,
       evidence_json TEXT,

@@ -17,8 +17,10 @@ import { approveReviewItems, DEFAULT_REVIEW_PATH, loadReviewManifest, saveReview
 import { ensureLocalDriveScaffold, getLocalDriveStatus } from "./providers/local-drive.js";
 import { createMockProviderSnapshots } from "./providers/mock-snapshots.js";
 import { explainPricingStrategy } from "./advisory/pricing-catalog.js";
+import { Catalog } from "./core/catalog.js";
 
 const [, , command, ...args] = process.argv;
+const DEFAULT_DB_PATH = ".nyx/nyx.db";
 
 const handlers = {
   plan: printPlan,
@@ -179,92 +181,99 @@ async function runReviewLocal(args) {
 
 async function runPrepareLocalOrganization(args) {
   const engagementPath = args[0] ?? "docs/engagement.md";
-  const reviewPath = args[1] ?? DEFAULT_REVIEW_PATH;
-  const audit = await buildLocalAudit({ engagementPath });
-  const saved = await saveReviewManifest({
-    audit,
-    reviewPath,
-    reviewItems: audit.organizationProposals
-  });
+  const dbPath = args[1] ?? DEFAULT_DB_PATH;
+  
+  await buildLocalAudit({ engagementPath, dbPath });
+  const catalog = await Catalog.open(dbPath);
+  const items = catalog.getPendingReviewItems();
 
   console.log(JSON.stringify({
-    reviewPath: saved.reviewPath,
-    totals: saved.manifest.totals,
+    dbPath: path.resolve(dbPath),
+    totals: {
+      pendingItems: items.length,
+      organizationProposals: items.filter(i => i.type === "organization_proposal").length,
+      mutationItems: items.filter(i => i.risk === "mutation").length
+    },
     nextSteps: [
-      `node src/cli.js local-organization-status ${saved.reviewPath}`,
-      `node src/cli.js approve-local-organization <item-id|all> ${saved.reviewPath}`,
-      `node src/cli.js apply-local-organization ${saved.reviewPath}`
+      `node src/cli.js local-organization-status ${dbPath}`,
+      `node src/cli.js approve-local-organization <item-id|all> ${dbPath}`,
+      `node src/cli.js apply-local-organization ${dbPath}`
     ]
   }, null, 2));
 }
 
 async function runPrepareReview(args) {
   const engagementPath = args[0] ?? "docs/engagement.md";
-  const reviewPath = args[1] ?? DEFAULT_REVIEW_PATH;
-  const audit = await buildLocalAudit({ engagementPath });
-  const saved = await saveReviewManifest({ audit, reviewPath });
+  const dbPath = args[1] ?? DEFAULT_DB_PATH;
+  
+  await buildLocalAudit({ engagementPath, dbPath });
+  const catalog = await Catalog.open(dbPath);
+  const items = catalog.getPendingReviewItems();
 
   console.log(JSON.stringify({
-    reviewPath: saved.reviewPath,
-    totals: saved.manifest.totals,
+    dbPath: path.resolve(dbPath),
+    totals: {
+      pendingItems: items.length,
+      organizationProposals: items.filter(i => i.type === "organization_proposal").length,
+      irrelevanceFindings: items.filter(i => i.type === "irrelevance_finding").length,
+      mutationItems: items.filter(i => i.risk === "mutation").length
+    },
     nextSteps: [
-      `node src/cli.js local-organization-status ${saved.reviewPath}`,
-      `node src/cli.js approve-local-organization <item-id|all> ${saved.reviewPath}`,
-      `node src/cli.js apply-local-organization ${saved.reviewPath}`
+      `node src/cli.js local-organization-status ${dbPath}`,
+      `node src/cli.js approve-local-organization <item-id|all> ${dbPath}`,
+      `node src/cli.js apply-local-organization ${dbPath}`
     ]
   }, null, 2));
 }
 
 async function runReviewStatus(args) {
-  const reviewPath = args[0] ?? DEFAULT_REVIEW_PATH;
-  const loaded = await loadReviewManifest(reviewPath);
-  const items = loaded.manifest.items;
+  const dbPath = args[0] ?? DEFAULT_DB_PATH;
+  const catalog = await Catalog.open(dbPath);
+  const items = catalog.getPendingReviewItems();
 
   console.log(JSON.stringify({
-    reviewPath: loaded.reviewPath,
+    dbPath: path.resolve(dbPath),
     totals: {
-      pendingItems: items.filter((item) => !item.approved).length,
-      approvedItems: items.filter((item) => item.approved).length,
+      pendingItems: items.filter((item) => item.status === "pending_user_approval").length,
+      approvedItems: items.filter((item) => item.status === "approved").length,
       allItems: items.length
     },
-    items: items.slice(0, 50).map((item) => {
-      return {
-        id: item.id,
-        action: item.action,
-        status: item.status,
-        approved: item.approved,
-        risk: item.risk,
-        subjectPath: item.subjectPath,
-        proposedPath: item.proposedPath,
-        proposedDeletePaths: item.proposedDeletePaths,
-        backupProof: item.backupProof
-      };
-    })
+    items: items.slice(0, 50)
   }, null, 2));
 }
 
 async function runApproveReview(args) {
   const itemId = args[0];
-  const reviewPath = args[1] ?? DEFAULT_REVIEW_PATH;
+  const dbPath = args[1] ?? DEFAULT_DB_PATH;
 
   if (!itemId) {
-    throw new Error("Usage: node src/cli.js approve-review <item-id|all> [review-path]");
+    throw new Error("Usage: node src/cli.js approve-review <item-id|all> [db-path]");
   }
 
-  const result = await approveReviewItems({
-    reviewPath,
-    itemIds: [itemId]
-  });
+  const catalog = await Catalog.open(dbPath);
+  if (itemId === "all") {
+    catalog.approveAllReviewItems();
+  } else {
+    catalog.approveReviewItem(itemId);
+  }
+
+  const items = catalog.getPendingReviewItems();
 
   console.log(JSON.stringify({
-    reviewPath: result.reviewPath,
-    approvedCount: result.approvedCount
+    dbPath: path.resolve(dbPath),
+    approvedCount: itemId === "all" ? "all" : 1,
+    totals: {
+      approvedItems: items.filter((i) => i.status === "approved").length,
+      pendingItems: items.filter((i) => i.status === "pending_user_approval").length
+    }
   }, null, 2));
 }
 
 async function runApplyReview(args) {
-  const reviewPath = args[0] ?? DEFAULT_REVIEW_PATH;
-  const result = await applyApprovedReview({ reviewPath });
+  const dbPath = args[0] ?? DEFAULT_DB_PATH;
+  const catalog = await Catalog.open(dbPath);
+  
+  const result = await applyApprovedReview({ catalog });
 
   console.log(JSON.stringify(result, null, 2));
 }

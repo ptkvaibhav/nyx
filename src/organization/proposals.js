@@ -24,7 +24,10 @@ export function buildOrganizationProposals(files = []) {
     const proposals = [];
 
     if (file.structure?.moveRecommended) {
-      proposals.push(buildMoveProposal(file));
+      const moveProposal = buildMoveProposal(file);
+      if (moveProposal) {
+        proposals.push(moveProposal);
+      }
     }
 
     if (file.structure?.renameRecommended) {
@@ -40,7 +43,10 @@ export function buildOrganizationProposals(files = []) {
 }
 
 function buildMoveProposal(file) {
-  const targetFolder = file.structure.expectedFolders[0];
+  const targetFolder = file.structure.expectedFolders?.[0];
+  if (!targetFolder) {
+    return null;
+  }
   const proposedRelativePath = path.posix.join(targetFolder, file.baseName);
   const proposedAbsolutePath = path.join(file.rootPath, ...proposedRelativePath.split("/"));
 

@@ -21,6 +21,7 @@ function buildDuplicateFinding(group) {
     status: "pending_user_approval",
     approvalGate: "deleting duplicates",
     risk: "destructive",
+    subjectPath: proposedKeepFile.absolutePath,
     matchedRule: "exact duplicate files by content hash",
     confidence: "high",
     reviewOnly: true,

@@ -64,6 +64,11 @@ export class Catalog {
     return this.db.prepare("SELECT * FROM files").all().map(mapDbFileToProfile);
   }
 
+  getFileByPath(absolutePath) {
+    const row = this.db.prepare("SELECT * FROM files WHERE absolute_path = ?").get(absolutePath);
+    return row ? mapDbFileToProfile(row) : null;
+  }
+
   getFilesBySha256(sha256) {
     return this.db.prepare("SELECT * FROM files WHERE sha256 = ?").all(sha256).map(mapDbFileToProfile);
   }
@@ -158,6 +163,7 @@ function mapDbFileToProfile(row) {
     sizeBytes: row.size_bytes,
     modifiedAt: row.modified_at,
     sha256: row.sha256,
+    lastScannedAt: row.last_scanned_at,
     classification: { category: row.category },
     structure: {
       purpose: row.purpose,
