@@ -188,14 +188,37 @@ async function applyReviewItem({ item, managedRoots, pathRedirects }) {
 async function applyPathMutation({ item, managedRoots, pathRedirects }) {
   const originalSourcePath = path.resolve(item.subjectPath);
   const sourcePath = resolveCurrentPath(originalSourcePath, pathRedirects);
-  const targetPath = resolveTargetPath({ item, sourcePath });
+  let targetPath = resolveTargetPath({ item, sourcePath });
 
   assertInsideManagedRoots(sourcePath, managedRoots);
   assertInsideManagedRoots(targetPath, managedRoots);
   await assertFingerprint(sourcePath, item.evidence?.sha256);
 
+  // Collision Resolution
   if (await exists(targetPath)) {
-    throw new Error(`Target path already exists: ${targetPath}`);
+    // If it's the exact same file (same hash), we can skip moving and just treat it as applied
+    const targetFingerprint = await fingerprintFile(targetPath);
+    if (targetFingerprint.sha256 === item.evidence?.sha256) {
+      return {
+        itemId: item.id,
+        action: item.action,
+        appliedAt: new Date().toISOString(),
+        previousPath: sourcePath,
+        newPath: targetPath,
+        status: "already_exists_identical"
+      };
+    }
+
+    // Otherwise, generate a unique path by appending a short hash
+    const ext = path.extname(targetPath);
+    const base = targetPath.slice(0, -ext.length);
+    const shortHash = String(item.evidence?.sha256 ?? Date.now()).slice(0, 8);
+    targetPath = `${base}_${shortHash}${ext}`;
+    
+    // Check again just in case of extreme coincidence
+    if (await exists(targetPath)) {
+       targetPath = `${base}_${Date.now()}${ext}`;
+    }
   }
 
   await mkdir(path.dirname(targetPath), { recursive: true });

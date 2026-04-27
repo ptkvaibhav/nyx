@@ -1,5 +1,6 @@
 import path from "node:path";
 import { isEligibleForLocalOrganization } from "./eligibility.js";
+import { identifyVersionGroups } from "./versions.js";
 
 const PURPOSE_LABELS = {
   resume: "Resume",
@@ -18,10 +19,19 @@ const PURPOSE_LABELS = {
 };
 
 export function buildOrganizationProposals(files = []) {
-  return files
-    .filter((file) => isEligibleForLocalOrganization(file))
+  const eligibleFiles = files.filter((file) => isEligibleForLocalOrganization(file));
+  const versionFindings = identifyVersionGroups(eligibleFiles);
+  const versionArchivablePaths = new Set(versionFindings.archivable.map(f => f.absolutePath));
+
+  return eligibleFiles
     .flatMap((file) => {
     const proposals = [];
+
+    // If it's an older version, propose moving to Versions subfolder
+    if (versionArchivablePaths.has(file.absolutePath)) {
+      proposals.push(buildVersionArchiveProposal(file));
+      return proposals;
+    }
 
     if (file.structure?.moveRecommended) {
       const moveProposal = buildMoveProposal(file);
@@ -111,6 +121,31 @@ function proposeFileName(file) {
 
 function buildProposalId(action, file) {
   return `${action}:${file.sha256}:${file.relativePath}`;
+}
+
+function buildVersionArchiveProposal(file) {
+  const baseTargetFolder = file.structure?.expectedFolders?.[0] || "Unsorted";
+  const targetFolder = path.posix.join(baseTargetFolder, "Versions");
+  const proposedRelativePath = path.posix.join(targetFolder, file.baseName);
+  const proposedAbsolutePath = path.join(file.rootPath, ...proposedRelativePath.split("/"));
+
+  return {
+    id: buildProposalId("version_archive", file),
+    type: "organization_proposal",
+    action: "move_file",
+    status: "pending_user_approval",
+    approvalGate: "moving files in batch",
+    risk: "mutation",
+    subjectPath: file.absolutePath,
+    proposedPath: proposedAbsolutePath,
+    evidence: {
+      isOlderVersion: true,
+      currentRelativePath: file.relativePath,
+      proposedRelativePath,
+      sha256: file.sha256,
+      reasons: ["An older version of this file exists; moving to Versions archive."]
+    }
+  };
 }
 
 function currentFolder(relativePath) {
