@@ -26,7 +26,19 @@ export const PURPOSE_RULES = [
     purpose: "finance",
     expectedFolders: ["Finance"],
     renameLabel: "Finance_Record",
-    pattern: /(invoice|receipt|tax|pay[\s._-]?slip|statement|e[\s._-]?statement|transactions?|accounttransactions?|account|bank|epfo|nomination|salary|compensation|increment|hike|ctc)/i
+    pattern: /\b(invoice|receipt|tax|pay[\s._-]?slip|statement|e[\s._-]?statement|transactions?|account[\s._-]?transactions?|account|bank|epfo|nomination|salary|compensation|increment|hike|ctc)\b/i
+  },
+  {
+    purpose: "insurance",
+    expectedFolders: ["Finance/Insurance"],
+    renameLabel: "Insurance_Policy",
+    pattern: /\b(insurance|policy|premium|hdfc[\s._-]?life|lic|max[\s._-]?life|star[\s._-]?health)\b/i
+  },
+  {
+    purpose: "utility",
+    expectedFolders: ["Finance/Utilities"],
+    renameLabel: "Utility_Bill",
+    pattern: /\b(electricity|water|gas|broadband|wifi|internet|jio|airtel|bill|recharge)\b/i
   },
   {
     purpose: "identity",
@@ -60,9 +72,25 @@ export const PURPOSE_RULES = [
   }
 ];
 
+export const VERSION_PATTERN = /([._-])v(\d+)([._-]|$)/i;
+
+export const CODE_EXTENSIONS = new Set([
+  ".js", ".ts", ".jsx", ".tsx", ".py", ".java", ".c", ".cpp", ".h", ".hpp", ".cs", ".go", ".rs", ".rb", ".php", ".html", ".css", ".sql", ".sh", ".bat", ".ps1", ".yml", ".yaml", ".json", ".xml", ".md", ".sol"
+]);
+
 export function inferPurposeDetails({ absolutePath = "", baseName = "", extension = "", category = "other" }) {
   const normalizedBaseName = String(baseName || path.basename(absolutePath)).toLowerCase();
   const normalizedExtension = String(extension || path.extname(absolutePath)).toLowerCase();
+
+  // If it's a known code extension, prefer the code category/purpose to avoid keyword misclassification
+  if (CODE_EXTENSIONS.has(normalizedExtension)) {
+    return {
+      purpose: "code",
+      expectedFolders: DEFAULT_FOLDERS_BY_CATEGORY.code,
+      matchedByRule: false,
+      renameLabel: null
+    };
+  }
 
   for (const rule of PURPOSE_RULES) {
     if (rule.pattern.test(normalizedBaseName)) {

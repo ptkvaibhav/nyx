@@ -8,14 +8,20 @@ import { hasVerifiedBackupProof } from "./protection.js";
 
 const DEFAULT_AUDIT_LOG_PATH = ".nyx/audit-log.jsonl";
 
-export async function applyApprovedReview({ reviewPath, auditLogPath = DEFAULT_AUDIT_LOG_PATH } = {}) {
-  const { reviewPath: resolvedReviewPath, manifest } = await loadReviewManifest(reviewPath);
-  const engagement = await loadEngagement(manifest.engagementPath);
+export async function applyApprovedReview({ 
+  catalog,
+  engagementPath = "docs/engagement.md", 
+  auditLogPath = DEFAULT_AUDIT_LOG_PATH 
+} = {}) {
+  const engagement = await loadEngagement(engagementPath);
   const managedRoots = engagement.managedDirectories.map((root) => path.resolve(root));
-  const approvedItems = manifest.items.filter((item) => item.approved === true && item.status === "approved");
+  
+  const allPendingItems = catalog.getPendingReviewItems();
+  const approvedItems = allPendingItems.filter((item) => item.approved === true && item.status === "approved");
+  
   const pathRedirects = new Map();
   const result = {
-    reviewPath: resolvedReviewPath,
+    dbPath: catalog.db.name,
     auditLogPath: path.resolve(auditLogPath),
     applied: [],
     skipped: [],
@@ -26,16 +32,14 @@ export async function applyApprovedReview({ reviewPath, auditLogPath = DEFAULT_A
     try {
       const appliedItem = await applyReviewItem({ item, managedRoots, pathRedirects });
       result.applied.push(appliedItem);
-      markItemApplied({
-        manifest,
-        itemId: item.id,
-        appliedItem
-      });
+      
+      catalog.markReviewItemApplied(item.id, appliedItem);
+
       await appendAuditEntry({
         auditLogPath,
         entry: {
           ...appliedItem,
-          reviewPath: resolvedReviewPath
+          dbPath: catalog.db.name
         }
       });
     } catch (error) {
@@ -46,15 +50,8 @@ export async function applyApprovedReview({ reviewPath, auditLogPath = DEFAULT_A
     }
   }
 
-  await writeReviewManifest({
-    reviewPath: resolvedReviewPath,
-    manifest: {
-      ...manifest,
-      updatedAt: new Date().toISOString()
-    }
-  });
-
-  const blockedItems = manifest.items.filter((item) => item.approved !== true && item.status !== "applied");
+  const remainingItems = catalog.getPendingReviewItems();
+  const blockedItems = remainingItems.filter((item) => item.approved !== true && item.status !== "applied");
   result.skipped.push(...blockedItems.map((item) => {
     return {
       itemId: item.id,
@@ -65,20 +62,111 @@ export async function applyApprovedReview({ reviewPath, auditLogPath = DEFAULT_A
   return result;
 }
 
-function markItemApplied({ manifest, itemId, appliedItem }) {
-  manifest.items = manifest.items.map((item) => {
-    if (item.id !== itemId) {
-      return item;
-    }
-
+export async function rollbackAppliedReview({
+  catalog,
+  engagementPath = "docs/engagement.md",
+  auditLogPath = DEFAULT_AUDIT_LOG_PATH
+} = {}) {
+  const engagement = await loadEngagement(engagementPath);
+  const managedRoots = engagement.managedDirectories.map((root) => path.resolve(root));
+  
+  // Get all applied items, newest first
+  const appliedItems = catalog.db.prepare("SELECT * FROM review_items WHERE status = 'applied' ORDER BY applied_at DESC").all().map(row => {
     return {
-      ...item,
-      status: "applied",
-      applied: true,
-      appliedAt: appliedItem.appliedAt,
-      appliedResult: appliedItem
+      ...row,
+      evidence: JSON.parse(row.evidence_json)
     };
   });
+
+  const result = {
+    dbPath: catalog.db.name,
+    auditLogPath: path.resolve(auditLogPath),
+    rolledBack: [],
+    errors: []
+  };
+
+  for (const item of appliedItems) {
+    try {
+      const rollbackAction = item.evidence?.rollback;
+      if (!rollbackAction) {
+        throw new Error(`No rollback metadata found for item ${item.id}`);
+      }
+
+      const rolledBack = await executeRollback({ rollbackAction, managedRoots });
+      result.rolledBack.push({
+        itemId: item.id,
+        ...rolledBack
+      });
+
+      // Update status in DB - move back to approved so user can re-apply if they want, 
+      // or pending if we want them to re-approve. Let's do pending_user_approval for safety.
+      catalog.db.prepare("UPDATE review_items SET status = 'pending_user_approval', approved = 0, applied_at = NULL, updated_at = ? WHERE id = ?")
+        .run(new Date().toISOString(), item.id);
+
+      await appendAuditEntry({
+        auditLogPath,
+        entry: {
+          action: "rollback",
+          itemId: item.id,
+          appliedAt: new Date().toISOString(),
+          details: rolledBack
+        }
+      });
+    } catch (error) {
+      result.errors.push({
+        itemId: item.id,
+        message: error.message
+      });
+    }
+  }
+
+  return result;
+}
+
+async function executeRollback({ rollbackAction, managedRoots }) {
+  if (rollbackAction.action === "move_path") {
+    const fromPath = path.resolve(rollbackAction.from);
+    const toPath = path.resolve(rollbackAction.to);
+
+    assertInsideManagedRoots(fromPath, managedRoots);
+    assertInsideManagedRoots(toPath, managedRoots);
+
+    if (await exists(toPath)) {
+      throw new Error(`Rollback target path already exists: ${toPath}`);
+    }
+
+    await mkdir(path.dirname(toPath), { recursive: true });
+    await rename(fromPath, toPath);
+
+    return {
+      action: "rolled_back_move",
+      from: fromPath,
+      to: toPath
+    };
+  }
+
+  if (rollbackAction.action === "restore_from_backup") {
+    const fromPath = path.resolve(rollbackAction.from);
+    const toPath = path.resolve(rollbackAction.to);
+
+    assertInsideManagedRoots(toPath, managedRoots);
+
+    if (await exists(toPath)) {
+      throw new Error(`Rollback target path already exists: ${toPath}`);
+    }
+
+    // Since it's a mock drive for now, we just rename/copy back
+    await mkdir(path.dirname(toPath), { recursive: true });
+    await rename(fromPath, toPath);
+
+    return {
+      action: "restored_from_backup",
+      from: fromPath,
+      to: toPath
+    };
+  }
+
+  throw new Error(`Unsupported rollback action: ${rollbackAction.action}`);
 }
 
 async function applyReviewItem({ item, managedRoots, pathRedirects }) {
@@ -100,14 +188,37 @@ async function applyReviewItem({ item, managedRoots, pathRedirects }) {
 async function applyPathMutation({ item, managedRoots, pathRedirects }) {
   const originalSourcePath = path.resolve(item.subjectPath);
   const sourcePath = resolveCurrentPath(originalSourcePath, pathRedirects);
-  const targetPath = resolveTargetPath({ item, sourcePath });
+  let targetPath = resolveTargetPath({ item, sourcePath });
 
   assertInsideManagedRoots(sourcePath, managedRoots);
   assertInsideManagedRoots(targetPath, managedRoots);
   await assertFingerprint(sourcePath, item.evidence?.sha256);
 
+  // Collision Resolution
   if (await exists(targetPath)) {
-    throw new Error(`Target path already exists: ${targetPath}`);
+    // If it's the exact same file (same hash), we can skip moving and just treat it as applied
+    const targetFingerprint = await fingerprintFile(targetPath);
+    if (targetFingerprint.sha256 === item.evidence?.sha256) {
+      return {
+        itemId: item.id,
+        action: item.action,
+        appliedAt: new Date().toISOString(),
+        previousPath: sourcePath,
+        newPath: targetPath,
+        status: "already_exists_identical"
+      };
+    }
+
+    // Otherwise, generate a unique path by appending a short hash
+    const ext = path.extname(targetPath);
+    const base = targetPath.slice(0, -ext.length);
+    const shortHash = String(item.evidence?.sha256 ?? Date.now()).slice(0, 8);
+    targetPath = `${base}_${shortHash}${ext}`;
+    
+    // Check again just in case of extreme coincidence
+    if (await exists(targetPath)) {
+       targetPath = `${base}_${Date.now()}${ext}`;
+    }
   }
 
   await mkdir(path.dirname(targetPath), { recursive: true });

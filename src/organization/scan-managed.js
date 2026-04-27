@@ -1,4 +1,4 @@
-import { readdir } from "node:fs/promises";
+import { readdir, stat } from "node:fs/promises";
 import path from "node:path";
 
 export async function scanManagedDirectories({ managedDirectories, exclusions = [] }) {
@@ -63,10 +63,13 @@ async function walkDirectory({ rootPath, currentPath, exclusions, files }) {
     }
 
     if (entry.isFile()) {
+      const stats = await stat(absolutePath);
       files.push({
         rootPath,
         absolutePath,
-        relativePath
+        relativePath,
+        modifiedAt: stats.mtime.toISOString(),
+        sizeBytes: stats.size
       });
     }
   }
