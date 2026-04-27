@@ -29,6 +29,18 @@ export const PURPOSE_RULES = [
     pattern: /\b(invoice|receipt|tax|pay[\s._-]?slip|statement|e[\s._-]?statement|transactions?|account[\s._-]?transactions?|account|bank|epfo|nomination|salary|compensation|increment|hike|ctc)\b/i
   },
   {
+    purpose: "insurance",
+    expectedFolders: ["Finance/Insurance"],
+    renameLabel: "Insurance_Policy",
+    pattern: /\b(insurance|policy|premium|hdfc[\s._-]?life|lic|max[\s._-]?life|star[\s._-]?health)\b/i
+  },
+  {
+    purpose: "utility",
+    expectedFolders: ["Finance/Utilities"],
+    renameLabel: "Utility_Bill",
+    pattern: /\b(electricity|water|gas|broadband|wifi|internet|jio|airtel|bill|recharge)\b/i
+  },
+  {
     purpose: "identity",
     expectedFolders: ["Identity"],
     renameLabel: "Identity_Document",
@@ -59,6 +71,8 @@ export const PURPOSE_RULES = [
     pattern: /(^|[\s._-])(setup|installer|install|portable|vmware|virtualbox)([\s._-]|$)/i
   }
 ];
+
+export const VERSION_PATTERN = /([._-])v(\d+)([._-]|$)/i;
 
 export const CODE_EXTENSIONS = new Set([
   ".js", ".ts", ".jsx", ".tsx", ".py", ".java", ".c", ".cpp", ".h", ".hpp", ".cs", ".go", ".rs", ".rb", ".php", ".html", ".css", ".sql", ".sh", ".bat", ".ps1", ".yml", ".yaml", ".json", ".xml", ".md", ".sol"

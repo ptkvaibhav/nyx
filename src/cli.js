@@ -10,7 +10,7 @@ import { scanWatchedDirectory } from "./core/scan.js";
 import { syncFileWithLocalDrive } from "./core/sync.js";
 import { loadEngagement } from "./engagement/parser.js";
 import { buildCloudAudit } from "./organization/cloud-audit.js";
-import { applyApprovedReview } from "./organization/executor.js";
+import { applyApprovedReview, rollbackAppliedReview } from "./organization/executor.js";
 import { buildLocalAudit } from "./organization/local-audit.js";
 import { buildProtectionPlan } from "./organization/protection.js";
 import { approveReviewItems, DEFAULT_REVIEW_PATH, loadReviewManifest, saveReviewManifest } from "./organization/review-store.js";
@@ -33,6 +33,7 @@ const handlers = {
   "local-organization-status": runReviewStatus,
   "approve-local-organization": runApproveReview,
   "apply-local-organization": runApplyReview,
+  "rollback-local-organization": runRollbackLocalOrganization,
   "prepare-review": runPrepareReview,
   "review-status": runReviewStatus,
   "approve-review": runApproveReview,
@@ -274,6 +275,15 @@ async function runApplyReview(args) {
   const catalog = await Catalog.open(dbPath);
   
   const result = await applyApprovedReview({ catalog });
+
+  console.log(JSON.stringify(result, null, 2));
+}
+
+async function runRollbackLocalOrganization(args) {
+  const dbPath = args[0] ?? DEFAULT_DB_PATH;
+  const catalog = await Catalog.open(dbPath);
+
+  const result = await rollbackAppliedReview({ catalog });
 
   console.log(JSON.stringify(result, null, 2));
 }

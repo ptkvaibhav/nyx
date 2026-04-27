@@ -62,6 +62,113 @@ export async function applyApprovedReview({
   return result;
 }
 
+export async function rollbackAppliedReview({
+  catalog,
+  engagementPath = "docs/engagement.md",
+  auditLogPath = DEFAULT_AUDIT_LOG_PATH
+} = {}) {
+  const engagement = await loadEngagement(engagementPath);
+  const managedRoots = engagement.managedDirectories.map((root) => path.resolve(root));
+  
+  // Get all applied items, newest first
+  const appliedItems = catalog.db.prepare("SELECT * FROM review_items WHERE status = 'applied' ORDER BY applied_at DESC").all().map(row => {
+    return {
+      ...row,
+      evidence: JSON.parse(row.evidence_json)
+    };
+  });
+
+  const result = {
+    dbPath: catalog.db.name,
+    auditLogPath: path.resolve(auditLogPath),
+    rolledBack: [],
+    errors: []
+  };
+
+  for (const item of appliedItems) {
+    try {
+      const rollbackAction = item.evidence?.rollback;
+      if (!rollbackAction) {
+        throw new Error(`No rollback metadata found for item ${item.id}`);
+      }
+
+      const rolledBack = await executeRollback({ rollbackAction, managedRoots });
+      result.rolledBack.push({
+        itemId: item.id,
+        ...rolledBack
+      });
+
+      // Update status in DB - move back to approved so user can re-apply if they want, 
+      // or pending if we want them to re-approve. Let's do pending_user_approval for safety.
+      catalog.db.prepare("UPDATE review_items SET status = 'pending_user_approval', approved = 0, applied_at = NULL, updated_at = ? WHERE id = ?")
+        .run(new Date().toISOString(), item.id);
+
+      await appendAuditEntry({
+        auditLogPath,
+        entry: {
+          action: "rollback",
+          itemId: item.id,
+          appliedAt: new Date().toISOString(),
+          details: rolledBack
+        }
+      });
+    } catch (error) {
+      result.errors.push({
+        itemId: item.id,
+        message: error.message
+      });
+    }
+  }
+
+  return result;
+}
+
+async function executeRollback({ rollbackAction, managedRoots }) {
+  if (rollbackAction.action === "move_path") {
+    const fromPath = path.resolve(rollbackAction.from);
+    const toPath = path.resolve(rollbackAction.to);
+
+    assertInsideManagedRoots(fromPath, managedRoots);
+    assertInsideManagedRoots(toPath, managedRoots);
+
+    if (await exists(toPath)) {
+      throw new Error(`Rollback target path already exists: ${toPath}`);
+    }
+
+    await mkdir(path.dirname(toPath), { recursive: true });
+    await rename(fromPath, toPath);
+
+    return {
+      action: "rolled_back_move",
+      from: fromPath,
+      to: toPath
+    };
+  }
+
+  if (rollbackAction.action === "restore_from_backup") {
+    const fromPath = path.resolve(rollbackAction.from);
+    const toPath = path.resolve(rollbackAction.to);
+
+    assertInsideManagedRoots(toPath, managedRoots);
+
+    if (await exists(toPath)) {
+      throw new Error(`Rollback target path already exists: ${toPath}`);
+    }
+
+    // Since it's a mock drive for now, we just rename/copy back
+    await mkdir(path.dirname(toPath), { recursive: true });
+    await rename(fromPath, toPath);
+
+    return {
+      action: "restored_from_backup",
+      from: fromPath,
+      to: toPath
+    };
+  }
+
+  throw new Error(`Unsupported rollback action: ${rollbackAction.action}`);
+}
+
 async function applyReviewItem({ item, managedRoots, pathRedirects }) {
   if (item.action === "move_file" || item.action === "rename_file") {
     return applyPathMutation({ item, managedRoots, pathRedirects });
