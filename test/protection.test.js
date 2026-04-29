@@ -7,7 +7,7 @@ import { constants } from "node:fs";
 import { syncFileWithConfig } from "../src/core/sync.js";
 import { applyApprovedReview } from "../src/organization/executor.js";
 import { buildProtectionPlan } from "../src/organization/protection.js";
-import { approveReviewItems, saveReviewManifest } from "../src/organization/review-store.js";
+import { Catalog } from "../src/core/catalog.js";
 
 test("buildProtectionPlan reports important backup status and archive proposals with proof", async () => {
   const workspace = await mkdtempWorkspace();
@@ -36,7 +36,7 @@ test("buildProtectionPlan reports important backup status and archive proposals 
 test("applyApprovedReview archives a local copy only after verified backup proof", async () => {
   const workspace = await mkdtempWorkspace();
   const context = await createProtectionFixture(workspace);
-  const reviewPath = path.join(workspace, ".nyx", "archive-review.json");
+  const dbPath = path.join(workspace, ".nyx", "nyx.db");
 
   await syncFileWithConfig({
     filePath: context.archivePath,
@@ -47,18 +47,21 @@ test("applyApprovedReview archives a local copy only after verified backup proof
     engagementPath: context.engagementPath,
     configPath: context.configPath
   });
-  const saved = await saveReviewManifest({ audit: plan, reviewPath });
-  const archiveItem = saved.manifest.items.find((item) => item.action === "archive_local_copy");
-
+  
+  const catalog = await Catalog.open(dbPath);
+  catalog.upsertReviewItems(plan.reviewQueue.items);
+  
+  const archiveItem = plan.reviewQueue.items.find((item) => item.action === "archive_local_copy");
   assert.ok(archiveItem);
-  await approveReviewItems({ reviewPath, itemIds: [archiveItem.id] });
+  
+  catalog.approveReviewItem(archiveItem.id);
 
-  const result = await applyApprovedReview({ reviewPath });
+  const result = await applyApprovedReview({ catalog, engagementPath: context.engagementPath });
 
   assert.equal(result.errors.length, 0);
   assert.equal(result.applied.length, 1);
   await assertMissing(context.archivePath);
-  assert.equal(await readFile(archiveItem.backupProof.storedPath, "utf8"), "old installer");
+  assert.equal(await readFile(archiveItem.evidence.backupProof.storedPath, "utf8"), "old installer");
 });
 
 async function mkdtempWorkspace() {
