@@ -3,7 +3,22 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Approval-gated local file organization and mock cloud protection tool",
+  "description": "High-integrity, safety-first file intelligence and organization system with SQLite persistence and cloud-bridge capabilities.",
+  "keywords": [
+    "file-management",
+    "automation",
+    "data-protection",
+    "sqlite",
+    "nodejs",
+    "safety-first",
+    "duplicate-detection",
+    "intelligent-organization",
+    "backup-system",
+    "cli-tool",
+    "metadata-management",
+    "rollback-engine",
+    "incremental-scan"
+  ],
   "engines": {
     "node": ">=22"
   },
