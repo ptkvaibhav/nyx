@@ -1,8 +1,11 @@
 {
   "name": "nyx",
-  "version": "0.1.0",
+  "version": "3.0.0",
   "private": true,
   "type": "module",
+  "bin": {
+    "nyx": "./src/cli.js"
+  },
   "description": "High-integrity, safety-first file intelligence and organization system with SQLite persistence and cloud-bridge capabilities.",
   "keywords": [
     "file-management",
@@ -39,6 +42,7 @@
   },
   "dependencies": {
     "better-sqlite3": "^12.9.0",
-    "express": "^5.2.1"
+    "express": "^5.2.1",
+    "open": "^11.0.0"
   }
 }

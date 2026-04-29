@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 import { access, readFile } from "node:fs/promises";
 import { constants } from "node:fs";
 import path from "node:path";
@@ -53,9 +55,11 @@ const handlers = {
 };
 
 async function main() {
-  const handler = handlers[command];
+  let handler = handlers[command];
 
-  if (!handler) {
+  if (!command) {
+    handler = runDefaultShowcase;
+  } else if (!handler) {
     printUsage();
     process.exitCode = 1;
     return;
@@ -395,9 +399,35 @@ async function runClassify(args) {
 }
 
 async function runUi(args) {
-  const port = parseInt(args[0] ?? "3000", 10);
+  const port = parseInt(args[0] ?? "3030", 10);
   const dbPath = args[1] ?? DEFAULT_DB_PATH;
   await startServer({ port, dbPath });
+  try {
+    const open = (await import("open")).default;
+    await open(`http://localhost:${port}`);
+  } catch (err) {
+    console.log(`Open browser automatically failed. Please visit http://localhost:${port}`);
+  }
+}
+
+async function runDefaultShowcase(args) {
+  console.log("");
+  console.log("=========================================");
+  console.log("           Welcome to Nyx v3             ");
+  console.log("=========================================");
+  console.log("Nyx is your high-integrity, safety-first file");
+  console.log("intelligence and organization system.");
+  console.log("");
+  console.log("Features:");
+  console.log(" - Duplicate detection by content fingerprint");
+  console.log(" - Intelligent organization & rename proposals");
+  console.log(" - Local audit & cloud bridge capabilities");
+  console.log(" - Rollback engine for safety");
+  console.log("");
+  console.log("Starting the Nyx Dashboard UI...");
+  console.log("=========================================");
+  console.log("");
+  await runUi(args);
 }
 
 async function buildProfileForClassification(filePath) {
