@@ -63,6 +63,8 @@ export async function buildLocalAudit({
   const organizationProposals = buildOrganizationProposals(files);
   const irrelevanceFindings = findIrrelevanceFindings({
     duplicates,
+    files,
+    directories: scanResult.directories,
     configuredRules: engagement.safeIrrelevanceRules
   });
   

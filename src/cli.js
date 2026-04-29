@@ -18,6 +18,7 @@ import { ensureLocalDriveScaffold, getLocalDriveStatus } from "./providers/local
 import { createMockProviderSnapshots } from "./providers/mock-snapshots.js";
 import { explainPricingStrategy } from "./advisory/pricing-catalog.js";
 import { Catalog } from "./core/catalog.js";
+import { startServer } from "./server.js";
 
 const [, , command, ...args] = process.argv;
 const DEFAULT_DB_PATH = ".nyx/nyx.db";
@@ -47,7 +48,8 @@ const handlers = {
   "sync-file": runSyncFile,
   decide: runDecide,
   fingerprint: runFingerprint,
-  classify: runClassify
+  classify: runClassify,
+  ui: runUi
 };
 
 async function main() {
@@ -392,6 +394,12 @@ async function runClassify(args) {
   console.log(JSON.stringify(classifyFile(fileProfile), null, 2));
 }
 
+async function runUi(args) {
+  const port = parseInt(args[0] ?? "3000", 10);
+  const dbPath = args[1] ?? DEFAULT_DB_PATH;
+  await startServer({ port, dbPath });
+}
+
 async function buildProfileForClassification(filePath) {
   const profile = await fingerprintFile(filePath);
   return {
@@ -416,6 +424,7 @@ function printUsage() {
   console.log("- plan");
   console.log("- doctor");
   console.log("- demo");
+  console.log("- ui [port] [db-path]");
   console.log("- engagement-summary [engagement-path]");
   console.log("- audit-local [engagement-path]");
   console.log("- review-local [engagement-path]");

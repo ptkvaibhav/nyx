@@ -4,6 +4,7 @@ import path from "node:path";
 export async function scanManagedDirectories({ managedDirectories, exclusions = [] }) {
   const normalizedExclusions = exclusions.map((entry) => normalizeSegment(entry));
   const files = [];
+  const directories = [];
   const roots = [];
   const missingDirectories = [];
 
@@ -12,14 +13,17 @@ export async function scanManagedDirectories({ managedDirectories, exclusions = 
 
     try {
       const rootFiles = [];
+      const rootDirs = [];
       await walkDirectory({
         rootPath,
         currentPath: rootPath,
         exclusions: normalizedExclusions,
-        files: rootFiles
+        files: rootFiles,
+        directories: rootDirs
       });
 
       files.push(...rootFiles);
+      directories.push(...rootDirs);
       roots.push({
         rootPath,
         fileCount: rootFiles.length
@@ -36,12 +40,13 @@ export async function scanManagedDirectories({ managedDirectories, exclusions = 
 
   return {
     files,
+    directories,
     roots,
     missingDirectories
   };
 }
 
-async function walkDirectory({ rootPath, currentPath, exclusions, files }) {
+async function walkDirectory({ rootPath, currentPath, exclusions, files, directories }) {
   const entries = await readdir(currentPath, { withFileTypes: true });
 
   for (const entry of entries) {
@@ -53,11 +58,17 @@ async function walkDirectory({ rootPath, currentPath, exclusions, files }) {
     }
 
     if (entry.isDirectory()) {
+      directories.push({
+        rootPath,
+        absolutePath,
+        relativePath
+      });
       await walkDirectory({
         rootPath,
         currentPath: absolutePath,
         exclusions,
-        files
+        files,
+        directories
       });
       continue;
     }
@@ -92,4 +103,3 @@ function normalizeSegment(value) {
 function isMissingPathError(error) {
   return error?.code === "ENOENT" || error?.code === "ENOTDIR";
 }
-
