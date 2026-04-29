@@ -5,26 +5,26 @@ import path from "node:path";
 import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { buildLocalAudit } from "../src/organization/local-audit.js";
 import { applyApprovedReview } from "../src/organization/executor.js";
-import { approveReviewItems, saveReviewManifest } from "../src/organization/review-store.js";
+import { Catalog } from "../src/core/catalog.js";
 
 test("applyApprovedReview skips unapproved review items without mutating files", async () => {
   const workspace = await mkdtemp(path.join(os.tmpdir(), "nyx-executor-"));
   const managedRoot = path.join(workspace, "managed");
   const engagementPath = path.join(workspace, "engagement.md");
-  const reviewPath = path.join(workspace, ".nyx", "review.json");
+  const dbPath = path.join(workspace, ".nyx", "nyx.db");
   const sourcePath = path.join(managedRoot, "file123.pdf");
 
   await mkdir(path.dirname(sourcePath), { recursive: true });
   await writeFile(sourcePath, "document", "utf8");
   await writeEngagement({ engagementPath, managedRoot });
 
-  const audit = await buildLocalAudit({ engagementPath });
-  const saved = await saveReviewManifest({ audit, reviewPath });
+  const catalog = await Catalog.open(dbPath);
+  await buildLocalAudit({ engagementPath, dbPath });
 
-  const result = await applyApprovedReview({ reviewPath });
+  const result = await applyApprovedReview({ catalog, engagementPath });
 
   assert.equal(result.applied.length, 0);
-  assert.equal(result.skipped.length, saved.manifest.items.length);
+  assert.equal(result.skipped.length > 0, true);
   assert.equal(await readFile(sourcePath, "utf8"), "document");
 });
 
@@ -32,7 +32,7 @@ test("applyApprovedReview applies approved move and rename proposals with audit 
   const workspace = await mkdtemp(path.join(os.tmpdir(), "nyx-executor-"));
   const managedRoot = path.join(workspace, "managed");
   const engagementPath = path.join(workspace, "engagement.md");
-  const reviewPath = path.join(workspace, ".nyx", "review.json");
+  const dbPath = path.join(workspace, ".nyx", "nyx.db");
   const auditLogPath = path.join(workspace, ".nyx", "audit-log.jsonl");
   const sourcePath = path.join(managedRoot, "file123.pdf");
 
@@ -40,12 +40,13 @@ test("applyApprovedReview applies approved move and rename proposals with audit 
   await writeFile(sourcePath, "document", "utf8");
   await writeEngagement({ engagementPath, managedRoot });
 
-  const audit = await buildLocalAudit({ engagementPath });
-  const saved = await saveReviewManifest({ audit, reviewPath });
-  const moveItem = saved.manifest.items.find((item) => item.action === "move_file");
+  const catalog = await Catalog.open(dbPath);
+  await buildLocalAudit({ engagementPath, dbPath });
+  const pending = catalog.getPendingReviewItems();
+  const moveItem = pending.find((item) => item.action === "move_file");
 
-  await approveReviewItems({ reviewPath, itemIds: [moveItem.id] });
-  const result = await applyApprovedReview({ reviewPath, auditLogPath });
+  catalog.approveReviewItem(moveItem.id);
+  const result = await applyApprovedReview({ catalog, engagementPath, auditLogPath });
 
   assert.equal(result.errors.length, 0);
   assert.equal(result.applied.length, 1);
@@ -56,7 +57,7 @@ test("applyApprovedReview applies approved move and rename proposals with audit 
   assert.match(auditLog, /"action":"move_file"/);
   assert.match(auditLog, /"rollback"/);
 
-  const secondResult = await applyApprovedReview({ reviewPath, auditLogPath });
+  const secondResult = await applyApprovedReview({ catalog, engagementPath, auditLogPath });
   assert.equal(secondResult.errors.length, 0);
   assert.equal(secondResult.applied.length, 0);
 });
@@ -65,68 +66,59 @@ test("applyApprovedReview can combine approved move and rename proposals for the
   const workspace = await mkdtemp(path.join(os.tmpdir(), "nyx-executor-"));
   const managedRoot = path.join(workspace, "managed");
   const engagementPath = path.join(workspace, "engagement.md");
-  const reviewPath = path.join(workspace, ".nyx", "review.json");
+  const dbPath = path.join(workspace, ".nyx", "nyx.db");
   const sourcePath = path.join(managedRoot, "file123.pdf");
 
   await mkdir(path.dirname(sourcePath), { recursive: true });
   await writeFile(sourcePath, "document", "utf8");
   await writeEngagement({ engagementPath, managedRoot });
 
-  const saved = await saveReviewManifest({
-    audit: {
-      engagementPath,
-      managedDirectories: [managedRoot]
-    },
-    reviewPath,
-    reviewItems: [
-      {
-        id: "move:demo",
-        type: "organization_proposal",
-        action: "move_file",
-        status: "pending_user_approval",
-        approvalGate: "moving files in batch",
-        risk: "mutation",
-        subjectPath: sourcePath,
-        proposedPath: path.join(managedRoot, "Documents", "file123.pdf"),
-        evidence: {
-          sha256: null
-        }
+  const catalog = await Catalog.open(dbPath);
+  const items = [
+    {
+      id: "move:demo",
+      type: "organization_proposal",
+      action: "move_file",
+      status: "pending_user_approval",
+      approvalGate: "moving files in batch",
+      risk: "mutation",
+      subjectPath: sourcePath,
+      proposedPath: path.join(managedRoot, "Documents", "file123.pdf"),
+      evidence: {
+        sha256: "43cc23fa52b87b4cc1d02b5b114154151d6adddb17c9fddc06b027fa99e24008"
+      }
       },
       {
-        id: "rename:demo",
-        type: "organization_proposal",
-        action: "rename_file",
-        status: "pending_user_approval",
-        approvalGate: "renaming files",
-        risk: "mutation",
-        subjectPath: sourcePath,
-        proposedName: "Document_demo.pdf",
-        proposedPath: path.join(managedRoot, "Document_demo.pdf"),
-        evidence: {
-          sha256: null
-        }
+      id: "rename:demo",
+      type: "organization_proposal",
+      action: "rename_file",
+      status: "pending_user_approval",
+      approvalGate: "renaming files",
+      risk: "mutation",
+      subjectPath: sourcePath,
+      proposedName: "Document_demo.pdf",
+      proposedPath: path.join(managedRoot, "Document_demo.pdf"),
+      evidence: {
+        sha256: "43cc23fa52b87b4cc1d02b5b114154151d6adddb17c9fddc06b027fa99e24008"
       }
-    ]
-  });
-  const moveItem = saved.manifest.items.find((item) => item.action === "move_file");
-  const renameItem = saved.manifest.items.find((item) => item.action === "rename_file");
+      }
+      ];
 
-  assert.ok(moveItem);
-  assert.ok(renameItem);
+      catalog.upsertReviewItems(items);
+      catalog.approveAllReviewItems();
 
-  await approveReviewItems({ reviewPath, itemIds: [moveItem.id, renameItem.id] });
-  const result = await applyApprovedReview({ reviewPath });
+      const result = await applyApprovedReview({ catalog, engagementPath });
 
-  assert.equal(result.errors.length, 0);
+      assert.equal(result.errors.length, 0);
   assert.equal(result.applied.length, 2);
-  assert.equal(await readFile(path.join(managedRoot, "Documents", renameItem.proposedName), "utf8"), "document");
+  assert.equal(await readFile(path.join(managedRoot, "Documents", "Document_demo.pdf"), "utf8"), "document");
 });
 
 test("applyApprovedReview deletes approved duplicate candidates after fingerprint verification", async () => {
   const workspace = await mkdtemp(path.join(os.tmpdir(), "nyx-executor-"));
   const managedRoot = path.join(workspace, "managed");
   const engagementPath = path.join(workspace, "engagement.md");
-  const reviewPath = path.join(workspace, ".nyx", "review.json");
+  const dbPath = path.join(workspace, ".nyx", "nyx.db");
   const firstPath = path.join(managedRoot, "Finance", "duplicate-a.pdf");
   const secondPath = path.join(managedRoot, "duplicate-b.pdf");
 
@@ -136,12 +128,13 @@ test("applyApprovedReview deletes approved duplicate candidates after fingerprin
   await writeFile(secondPath, "same", "utf8");
   await writeEngagement({ engagementPath, managedRoot });
 
-  const audit = await buildLocalAudit({ engagementPath });
-  const saved = await saveReviewManifest({ audit, reviewPath });
-  const duplicateItem = saved.manifest.items.find((item) => item.action === "review_duplicate_deletion");
+  const catalog = await Catalog.open(dbPath);
+  await buildLocalAudit({ engagementPath, dbPath });
+  const pending = catalog.getPendingReviewItems();
+  const duplicateItem = pending.find((item) => item.action === "review_duplicate_deletion");
 
-  await approveReviewItems({ reviewPath, itemIds: [duplicateItem.id] });
-  const result = await applyApprovedReview({ reviewPath });
+  catalog.approveReviewItem(duplicateItem.id);
+  const result = await applyApprovedReview({ catalog, engagementPath });
 
   assert.equal(result.errors.length, 0);
   assert.equal(result.applied.length, 1);

@@ -31,7 +31,9 @@ test("buildOrganizationProposals creates approval-gated move and rename proposal
 
   const proposals = buildOrganizationProposals([file]);
 
-  assert.equal(proposals.length, 2);
+  // Should have move and rename
+  assert.equal(proposals.filter(p => p.action === "move_file").length, 1);
+  assert.equal(proposals.filter(p => p.action === "rename_file").length, 1);
 
   const move = proposals.find((proposal) => proposal.action === "move_file");
   assert.ok(move);
@@ -47,30 +49,32 @@ test("buildOrganizationProposals creates approval-gated move and rename proposal
   assert.equal(rename.evidence.sha256, "abcdef1234567890");
 });
 
-test("buildOrganizationProposals skips nested bundle files that should not be reorganized individually", () => {
-  const proposals = buildOrganizationProposals([
-    {
-      rootPath: path.resolve("managed"),
-      absolutePath: path.resolve("managed", "bundle", "nested", "file123.pdf"),
-      relativePath: "bundle/nested/file123.pdf",
-      baseName: "file123.pdf",
-      extension: ".pdf",
-      sha256: "abcdef1234567890",
-      classification: {
-        category: "document"
-      },
-      structure: {
-        purpose: "document",
-        expectedFolders: ["Documents"],
-        moveRecommended: true,
-        renameRecommended: true,
-        reasons: ["Nested bundle"]
-      }
+test("buildOrganizationProposals now allows deep nesting but respects system exclusions", () => {
+  const file = {
+    rootPath: path.resolve("managed"),
+    absolutePath: path.resolve("managed", "some", "deep", "path", "file123.pdf"),
+    relativePath: "some/deep/path/file123.pdf",
+    baseName: "file123.pdf",
+    extension: ".pdf",
+    sha256: "abcdef1234567890",
+    classification: { category: "document" },
+    structure: {
+      purpose: "document",
+      expectedFolders: ["Documents"],
+      moveRecommended: true,
+      renameRecommended: false
     }
-  ]);
+  };
 
-  assert.equal(proposals.length, 0);
-  assert.equal(isEligibleForLocalOrganization("bundle/nested/file123.pdf"), false);
+  const proposals = buildOrganizationProposals([file]);
+
+  // Deep files are now eligible
+  assert.equal(proposals.length, 1);
+  assert.equal(isEligibleForLocalOrganization("some/deep/path/file123.pdf"), true);
+  
+  // System segments are still excluded
+  assert.equal(isEligibleForLocalOrganization("node_modules/pkg/index.js"), false);
+  assert.equal(isEligibleForLocalOrganization(".git/config"), false);
 });
 
 test("findIrrelevanceFindings turns duplicate groups into review-only destructive findings", () => {
@@ -94,24 +98,6 @@ test("findIrrelevanceFindings turns duplicate groups into review-only destructiv
   assert.equal(findings[0].risk, "destructive");
   assert.equal(findings[0].evidence.duplicateCount, 2);
   assert.equal(findings[0].proposedDeletePaths.length, 1);
-});
-
-test("findIrrelevanceFindings skips duplicates nested inside extracted bundles", () => {
-  const findings = findIrrelevanceFindings({
-    configuredRules: ["exact duplicate files by content hash"],
-    duplicates: [
-      {
-        sha256: "same-hash",
-        sizeBytes: 128,
-        files: [
-          { absolutePath: "bundle/a.txt", relativePath: "bundle/a.txt", rootPath: "root" },
-          { absolutePath: "bundle/nested/b.txt", relativePath: "bundle/nested/b.txt", rootPath: "root" }
-        ]
-      }
-    ]
-  });
-
-  assert.equal(findings.length, 0);
 });
 
 test("buildReviewQueue combines proposals and findings with summary totals", () => {

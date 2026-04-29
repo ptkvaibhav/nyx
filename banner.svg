@@ -1,0 +1,11 @@
+<svg width="800" height="200" viewBox="0 0 800 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="800" height="200" rx="12" fill="#0F172A"/>
+  <path d="M400 40L440 100L400 160L360 100L400 40Z" fill="#38BDF8" fill-opacity="0.8"/>
+  <path d="M400 60L425 100L400 140L375 100L400 60Z" fill="#7DD3FC"/>
+  <text x="400" y="185" font-family="Inter, sans-serif" font-size="24" font-weight="bold" fill="white" text-anchor="middle">NYX</text>
+  <text x="400" y="15" font-family="Inter, sans-serif" font-size="12" fill="#94A3B8" text-anchor="middle" letter-spacing="0.2em">INTELLIGENT FILE ORGANIZATION</text>
+  <circle cx="100" cy="100" r="2" fill="#334155"/>
+  <circle cx="700" cy="50" r="2" fill="#334155"/>
+  <circle cx="150" cy="40" r="1.5" fill="#334155"/>
+  <circle cx="650" cy="160" r="1.5" fill="#334155"/>
+</svg>

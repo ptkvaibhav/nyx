@@ -1,143 +1,72 @@
-# Nyx
+# Nyx: Intelligent File Organization & Protection
 
-Nyx is a file organization and protection system for user-approved directories.
+![Nyx Banner](banner.svg)
 
-The product flow is:
+Nyx is a high-integrity, safety-first file management system designed to bring order to chaotic local directories and protect your most important data through automated, approval-gated workflows.
 
-1. audit local files inside approved roots only
-2. detect duplicates, stale files, and safe irrelevance candidates
-3. separate structured files from unstructured files
-4. propose renames and folder moves with user confirmation
-5. apply the same audit and organization model to connected cloud storage
-6. protect important files with redundant backups
-7. archive lower-priority files to cloud-only storage after verified backup and explicit approval
+## 🚀 The Nyx Workflow
 
-## Product Rules
+Nyx operates on a **Human-in-the-Loop** model. It never moves or deletes a file without your explicit approval.
 
-- Nyx must only scan directories listed by the user in [docs/engagement.md](/C:/Users/ptkva/Documents/nyx/docs/engagement.md).
-- Nyx must never rename, move, or delete files without showing evidence and obtaining approval.
-- Duplicates are proven by content fingerprint, not filename.
-- Irrelevance is heuristic and review-only.
-- Important files should keep a local copy and a cloud backup.
-- Lower-priority files may become cloud-only, but only after upload proof and user confirmation.
+1.  **Local Audit**: Deep scan of user-approved roots with SHA-256 fingerprinting.
+2.  **Intelligence**: Automatically detects duplicates (by hash), versioned files (`v1`, `v2`), and classifies content (Finance, Legal, Code, etc.).
+3.  **Proposal**: Generates a persistent review queue in SQLite with suggested renames and organizational moves.
+4.  **Review**: You approve or reject suggestions via CLI (or the upcoming Web Dashboard).
+5.  **Execution**: Nyx safely applies changes, validates fingerprints before every move, and maintains a rollback-ready audit log.
+6.  **Protection**: Redundantly backs up important categories to cloud storage (Mock Cloud for now, real APIs coming soon).
 
-## Current Repository State
+## ✨ Key Features
 
-The repository currently contains:
+*   **⚡ Incremental Scanning**: Powered by SQLite, Nyx tracks file stats to skip unchanged files, making rescans of thousands of files near-instant.
+*   **🧠 Purpose-Based Rules**: Granular detection patterns for Insurance policies, Utility bills, Bank statements, Resumes, and more.
+*   **📦 Version Management**: Automatically identifies older versions of documents and proposes archival to keep your primary folders clean.
+*   **🛡️ Safety First**:
+    *   **Fingerprint Validation**: Ensures a file hasn't changed between proposal and execution.
+    *   **Rollback Engine**: Undo any organization run with a single command.
+    *   **Managed Roots**: Nyx only touches what you tell it to in `docs/engagement.md`.
+*   **📊 Persistent Catalog**: Full SQLite backend for metadata storage, ensuring scalability and durability.
 
-- the engagement template for user-approved scan roots and approval rules
-- the product plan and roadmap
-- a local mock-drive scaffold for storage experiments
-- a local audit foundation for engagement parsing, duplicate detection, and structure scoring
-- a preview-only review queue for duplicate findings and move or rename proposals
-- an approval-gated execution flow with audit log and rollback metadata
-- a mock cloud audit with backup proof for local Drive uploads
-- a mock-provider protection and archive planner with approval-gated local-copy archival
-- verification tooling for quality, security, unit, and smoke checks
-
-The mock `Drive/` implementation is not the final product. It is a safe local scaffold used to validate file selection, routing, duplicate checks, and review gates before real cloud integrations are introduced.
-
-## Current Commands
+## 🛠️ Installation & Setup
 
 ```bash
-node src/cli.js plan
-node src/cli.js doctor
-node src/cli.js demo
-node src/cli.js engagement-summary [engagement-path]
-node src/cli.js audit-local [engagement-path]
-node src/cli.js review-local [engagement-path]
-node src/cli.js prepare-local-organization [engagement-path] [review-path]
-node src/cli.js local-organization-status [review-path]
-node src/cli.js approve-local-organization <item-id|all> [review-path]
-node src/cli.js apply-local-organization [review-path]
-node src/cli.js prepare-review [engagement-path] [review-path]
-node src/cli.js review-status [review-path]
-node src/cli.js approve-review <item-id|all> [review-path]
-node src/cli.js apply-review [review-path]
-node src/cli.js audit-cloud [config-path]
-node src/cli.js plan-protection [engagement-path] [config-path]
-node src/cli.js prepare-archive [engagement-path] [config-path] [review-path]
-node src/cli.js init-drive
-node src/cli.js drive-status
-node src/cli.js sync-file <file-path>
-node src/cli.js fingerprint <file-path>
-node src/cli.js classify <file-path>
-npm run check:quality
-npm run check:security
-npm run test:smoke
-npm test
+# Clone the repository
+git clone https://github.com/ptkvaibhav/nyx.git
+cd nyx
+
+# Install dependencies
+npm install
+
+# Initialize your engagement (what Nyx can scan)
+# Edit docs/engagement.md to add your folders
 ```
 
-## Operating Model
+## ⌨️ Common Commands
 
-### Phase 1: Audit
+| Command | Description |
+| :--- | :--- |
+| `node src/cli.js audit-local` | Performs a full scan of managed directories. |
+| `node src/cli.js prepare-local-organization` | Generates suggestions for moves and renames. |
+| `node src/cli.js local-organization-status` | Views the current pending review queue. |
+| `node src/cli.js approve-local-organization all` | Approves all organization proposals. |
+| `node src/cli.js apply-local-organization` | Executes the approved changes on disk. |
+| `node src/cli.js rollback-local-organization` | Undoes the last set of organization actions. |
 
-- scan only approved directories
-- parse engagement rules and default exclusions
-- fingerprint files
-- classify file types
-- detect duplicates
-- flag stale or safe irrelevance candidates
-- score structured vs unstructured files
+## 🧪 Verification
 
-### Phase 2: Local Organization
+Nyx is built with quality as a first-class citizen:
 
-- propose folder destinations
-- propose filename changes per category naming rules
-- show evidence for each move or rename
-- execute only after user approval
-- write execution results to `.nyx/audit-log.jsonl`
-- include rollback metadata for applied renames and moves
+*   **Quality**: `npm run check:quality`
+*   **Security**: `npm run check:security`
+*   **Testing**: `npm test` & `npm run test:smoke`
 
-Recommended local-first workflow:
+---
 
-```bash
-node src/cli.js audit-local
-node src/cli.js prepare-local-organization
-node src/cli.js local-organization-status
-node src/cli.js approve-local-organization <item-id>
-node src/cli.js apply-local-organization
-```
+## 🗺️ Roadmap
 
-### Phase 3: Cloud Audit
-
-- inspect connected cloud storage
-- detect duplicates and structure problems there too
-- reconcile local and cloud structure
-- current implementation audits the local mock Drive scaffold
-- real Google Drive and OneDrive APIs remain future provider work
-
-### Phase 4: Protect And Archive
-
-- back up important categories redundantly
-- verify backup proof
-- move low-priority content to cloud-only storage when approved
-- current implementation plans against the local mock Drive scaffold and applies only approved archival proposals
-
-Recommended protection workflow:
-
-```bash
-node src/cli.js sync-file <lower-priority-file>
-node src/cli.js plan-protection
-node src/cli.js prepare-archive
-node src/cli.js review-status
-node src/cli.js approve-review <item-id>
-node src/cli.js apply-review
-```
-
-## Key Documents
-
-- [docs/engagement.md](/C:/Users/ptkva/Documents/nyx/docs/engagement.md): user-approved scan scope, naming rules, safe irrelevance rules, important categories, and approval gates
-- [docs/project-plan.md](/C:/Users/ptkva/Documents/nyx/docs/project-plan.md): detailed architecture and phased delivery plan
-- [docs/roadmap.md](/C:/Users/ptkva/Documents/nyx/docs/roadmap.md): short implementation roadmap
-- [Drive/README.md](/C:/Users/ptkva/Documents/nyx/Drive/README.md): notes on the current local mock-drive scaffold
-
-## Verification
-
-The scaffold is expected to pass:
-
-- `npm run check:quality`
-- `npm run check:security`
-- `npm test`
-- `npm run test:smoke`
-- `npm audit --json`
+- [x] SQLite Metadata Storage
+- [x] Incremental Scanning Logic
+- [x] Version & Purpose Intelligence
+- [x] Rollback System
+- [ ] **Next**: React-based Visual Dashboard
+- [ ] Google Drive & OneDrive Integration
+- [ ] Duplicate Suffix Intelligence (`(1)`, `(2)`)
