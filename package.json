@@ -3,7 +3,22 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Approval-gated local file organization and mock cloud protection tool",
+  "description": "High-integrity, safety-first file intelligence and organization system with SQLite persistence and cloud-bridge capabilities.",
+  "keywords": [
+    "file-management",
+    "automation",
+    "data-protection",
+    "sqlite",
+    "nodejs",
+    "safety-first",
+    "duplicate-detection",
+    "intelligent-organization",
+    "backup-system",
+    "cli-tool",
+    "metadata-management",
+    "rollback-engine",
+    "incremental-scan"
+  ],
   "engines": {
     "node": ">=22"
   },
@@ -19,9 +34,11 @@
     "check:quality": "node scripts/check-quality.js",
     "check:security": "node scripts/check-security.js",
     "test:smoke": "node scripts/run-smoke.js",
-    "test": "node --test test/engagement.test.js test/executor.test.js test/local-audit.test.js test/local-drive.test.js test/protection.test.js test/review-queue.test.js"
+    "test": "node --test test/engagement.test.js test/executor.test.js test/local-audit.test.js test/local-drive.test.js test/protection.test.js test/review-queue.test.js",
+    "ui:build": "cd ui && npm run build"
   },
   "dependencies": {
-    "better-sqlite3": "^12.9.0"
+    "better-sqlite3": "^12.9.0",
+    "express": "^5.2.1"
   }
 }
