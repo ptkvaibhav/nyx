@@ -5,7 +5,7 @@ import { applyApprovedReview } from "./organization/executor.js";
 
 const DEFAULT_DB_PATH = ".nyx/nyx.db";
 
-export async function startServer({ port = 3000, dbPath = DEFAULT_DB_PATH } = {}) {
+export async function startServer({ port = 3030, dbPath = DEFAULT_DB_PATH } = {}) {
   const app = express();
   const catalog = await Catalog.open(dbPath);
 

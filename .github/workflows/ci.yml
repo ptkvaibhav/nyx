@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [ main, v2, v2-file-organization-audit ]
+    branches: [ main, v3 ]
   pull_request:
-    branches: [ main, v2 ]
+    branches: [ main, v3 ]
 
 jobs:
   build:
@@ -29,8 +29,11 @@ jobs:
     - name: Run Quality Checks
       run: npm run check:quality
       
-    - name: Run Security Checks
+    - name: Run Security Scans on Code
       run: npm run check:security
+      
+    - name: Run Dependency Audit
+      run: npm audit
       
     - name: Run Tests
       run: npm test

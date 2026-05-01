@@ -216,6 +216,7 @@ SQLite remains the right first persistence layer for this.
 - folder proposal engine
 - irrelevance review engine
 - user approval queue
+- React-based visual dashboard with automated `nyx` CLI global command
 
 ### V4: Local Execution - Implemented
 

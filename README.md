@@ -33,8 +33,12 @@ Nyx operates on a **Human-in-the-Loop** model. It never moves or deletes a file 
 git clone https://github.com/ptkvaibhav/nyx.git
 cd nyx
 
-# Install dependencies
+# Install dependencies and link globally
 npm install
+npm link
+
+# Now you can use the `nyx` command from anywhere!
+nyx
 
 # Initialize your engagement (what Nyx can scan)
 # Edit docs/engagement.md to add your folders
@@ -44,12 +48,13 @@ npm install
 
 | Command | Description |
 | :--- | :--- |
-| `node src/cli.js audit-local` | Performs a full scan of managed directories. |
-| `node src/cli.js prepare-local-organization` | Generates suggestions for moves and renames. |
-| `node src/cli.js local-organization-status` | Views the current pending review queue. |
-| `node src/cli.js approve-local-organization all` | Approves all organization proposals. |
-| `node src/cli.js apply-local-organization` | Executes the approved changes on disk. |
-| `node src/cli.js rollback-local-organization` | Undoes the last set of organization actions. |
+| `nyx` | Launches the React-based Visual Dashboard automatically. |
+| `nyx audit-local` | Performs a full scan of managed directories. |
+| `nyx prepare-local-organization` | Generates suggestions for moves and renames. |
+| `nyx local-organization-status` | Views the current pending review queue. |
+| `nyx approve-local-organization all` | Approves all organization proposals. |
+| `nyx apply-local-organization` | Executes the approved changes on disk. |
+| `nyx rollback-local-organization` | Undoes the last set of organization actions. |
 
 ## 🧪 Verification
 
@@ -67,6 +72,6 @@ Nyx is built with quality as a first-class citizen:
 - [x] Incremental Scanning Logic
 - [x] Version & Purpose Intelligence
 - [x] Rollback System
-- [ ] **Next**: React-based Visual Dashboard
-- [ ] Google Drive & OneDrive Integration
+- [x] React-based Visual Dashboard
+- [ ] **Next**: Google Drive & OneDrive Integration
 - [ ] Duplicate Suffix Intelligence (`(1)`, `(2)`)

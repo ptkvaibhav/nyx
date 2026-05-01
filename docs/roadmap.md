@@ -20,6 +20,7 @@
 - add irrelevance review engine
 - build approval queue
 - expose local-first organization commands
+- bundled React-based Visual Dashboard with an automated global `nyx` CLI launcher
 
 ## V4 - Implemented For Local Files
 
