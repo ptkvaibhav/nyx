@@ -72,15 +72,41 @@ export const PURPOSE_RULES = [
   }
 ];
 
-export const VERSION_PATTERN = /([._-])v(\d+)([._-]|$)/i;
+// Supports: _v1, -v1, .v1, (1), - Copy, - Copy (1)
+export const VERSION_PATTERN = /([._-]v(\d+))|(\((\d+)\))|([- ]Copy( \((\d+)\))?)$/i;
 
 export const CODE_EXTENSIONS = new Set([
   ".js", ".ts", ".jsx", ".tsx", ".py", ".java", ".c", ".cpp", ".h", ".hpp", ".cs", ".go", ".rs", ".rb", ".php", ".html", ".css", ".sql", ".sh", ".bat", ".ps1", ".yml", ".yaml", ".json", ".xml", ".md", ".sol"
 ]);
 
-export function inferPurposeDetails({ absolutePath = "", baseName = "", extension = "", category = "other" }) {
+export function inferPurposeDetails({ absolutePath = "", baseName = "", extension = "", category = "other", extractedText = "" }) {
   const normalizedBaseName = String(baseName || path.basename(absolutePath)).toLowerCase();
   const normalizedExtension = String(extension || path.extname(absolutePath)).toLowerCase();
+  
+  // Specific Deep Content Rule: Form 16 Segregation
+  if (normalizedBaseName.includes("f16") || normalizedBaseName.includes("form 16") || /form\s*no\.?\s*16/i.test(extractedText)) {
+    // Try to extract Assessment Year from text (e.g. "Assessment Year: 2024-25" or "Assessment Year 2024-25")
+    let yearMatch = extractedText.match(/Assessment Year[:\s]*(\d{4}-\d{2})/i) || extractedText.match(/(\d{4}-\d{2})/);
+    // Fallback to year in filename
+    if (!yearMatch) {
+       yearMatch = normalizedBaseName.match(/(\d{4}-\d{2})/);
+    }
+    
+    let folder = "Finance/Form_16";
+    if (yearMatch) {
+       // Convert '2024-25' to '2024' or keep '2024-25'
+       const yearStr = yearMatch[1]; 
+       const startYear = yearStr.split('-')[0];
+       folder = `Finance/Form_16/${startYear}`;
+    }
+
+    return {
+      purpose: "finance",
+      expectedFolders: [folder],
+      matchedByRule: true,
+      renameLabel: "Form_16"
+    };
+  }
 
   // If it's a known code extension, prefer the code category/purpose to avoid keyword misclassification
   if (CODE_EXTENSIONS.has(normalizedExtension)) {

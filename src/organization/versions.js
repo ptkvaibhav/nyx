@@ -10,7 +10,8 @@ export function identifyVersionGroups(files) {
   for (const file of files) {
     const { baseIdentity, version } = parseVersionInfo(file.baseName);
     if (version !== null) {
-      const key = `${file.rootPath}:${baseIdentity}:${file.extension.toLowerCase()}`;
+      const expectedFolderKey = file.structure?.expectedFolders?.[0] ?? "";
+      const key = `${file.rootPath}:${expectedFolderKey}:${baseIdentity}:${file.extension.toLowerCase()}`;
       if (!groups.has(key)) {
         groups.set(key, []);
       }
@@ -43,10 +44,23 @@ function parseVersionInfo(fileName) {
     return { baseIdentity: fileName, version: null };
   }
 
-  // Remove the version segment to get the base identity
-  // e.g., "Project_v2.pdf" -> "Project"
   const versionSegment = match[0];
-  const versionNumber = parseInt(match[2], 10);
+  let versionNumber = 0;
+
+  // Group 2: v(\d+)
+  if (match[2]) {
+    versionNumber = parseInt(match[2], 10);
+  } 
+  // Group 4: (\d+) from (1)
+  else if (match[4]) {
+    versionNumber = parseInt(match[4], 10);
+  }
+  // Group 5: Copy suffix
+  else if (match[5]) {
+    // Group 8: (\d+) from Copy (1)
+    versionNumber = match[8] ? parseInt(match[8], 10) : 1;
+  }
+
   const baseIdentity = fileName.replace(versionSegment, "").trim();
 
   return { baseIdentity, version: versionNumber };

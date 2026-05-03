@@ -55,17 +55,20 @@ const handlers = {
 };
 
 async function main() {
-  let handler = handlers[command];
-
-  if (!command) {
-    handler = runDefaultShowcase;
-  } else if (!handler) {
-    printUsage();
+  if (command === "doctor") {
+    await runDoctor();
+    return;
+  }
+  
+  if (command && command !== "ui") {
+    console.log("Nyx has been upgraded to V5! Pure CLI commands are deprecated.");
+    console.log("Please run `nyx` without arguments to launch the new interactive AI Web Dashboard.");
+    console.log("To check system health, run `nyx doctor`.");
     process.exitCode = 1;
     return;
   }
 
-  await handler(args);
+  await runDefaultShowcase(args);
 }
 
 async function printPlan() {
@@ -401,6 +404,25 @@ async function runClassify(args) {
 async function runUi(args) {
   const port = parseInt(args[0] ?? "3030", 10);
   const dbPath = args[1] ?? DEFAULT_DB_PATH;
+  
+  const uiDistPath = path.resolve("ui", "dist", "index.html");
+  if (!(await exists(uiDistPath))) {
+    console.log("First time setup: Building the Nyx Dashboard UI...");
+    try {
+      const { execSync } = await import("node:child_process");
+      console.log("Installing UI dependencies...");
+      execSync("npm install", { cwd: path.resolve("ui"), stdio: "inherit", shell: true });
+      console.log("Building UI bundle...");
+      execSync("npm run build", { cwd: path.resolve("ui"), stdio: "inherit", shell: true });
+      console.log("UI build complete.");
+    } catch (error) {
+      console.error("Failed to build the UI automatically:", error.message);
+      console.log("Please cd into the 'ui' directory and run 'npm install && npm run build' manually.");
+      process.exitCode = 1;
+      return;
+    }
+  }
+
   await startServer({ port, dbPath });
   try {
     const open = (await import("open")).default;
@@ -413,16 +435,16 @@ async function runUi(args) {
 async function runDefaultShowcase(args) {
   console.log("");
   console.log("=========================================");
-  console.log("           Welcome to Nyx v3             ");
+  console.log("           Welcome to Nyx v5             ");
   console.log("=========================================");
   console.log("Nyx is your high-integrity, safety-first file");
   console.log("intelligence and organization system.");
   console.log("");
   console.log("Features:");
+  console.log(" - Interactive Web Dashboard & AI Wizard");
+  console.log(" - Local Ollama AI Reasoning Engine");
   console.log(" - Duplicate detection by content fingerprint");
-  console.log(" - Intelligent organization & rename proposals");
-  console.log(" - Local audit & cloud bridge capabilities");
-  console.log(" - Rollback engine for safety");
+  console.log(" - Deep Semantic Folder Extraction");
   console.log("");
   console.log("Starting the Nyx Dashboard UI...");
   console.log("=========================================");

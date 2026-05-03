@@ -48,13 +48,10 @@ nyx
 
 | Command | Description |
 | :--- | :--- |
-| `nyx` | Launches the React-based Visual Dashboard automatically. |
-| `nyx audit-local` | Performs a full scan of managed directories. |
-| `nyx prepare-local-organization` | Generates suggestions for moves and renames. |
-| `nyx local-organization-status` | Views the current pending review queue. |
-| `nyx approve-local-organization all` | Approves all organization proposals. |
-| `nyx apply-local-organization` | Executes the approved changes on disk. |
-| `nyx rollback-local-organization` | Undoes the last set of organization actions. |
+| `nyx` | Launches the interactive React Web Dashboard powered by AI reasoning. |
+| `nyx doctor` | Performs a system health check to ensure dependencies and configurations are correct. |
+
+*Note: As of V5, pure batch CLI commands (like `audit-local` or `prepare-local-organization`) are deprecated in favor of the interactive UI wizard.*
 
 ## 🧪 Verification
 
@@ -73,5 +70,6 @@ Nyx is built with quality as a first-class citizen:
 - [x] Version & Purpose Intelligence
 - [x] Rollback System
 - [x] React-based Visual Dashboard
+- [x] Duplicate Suffix Intelligence (`(1)`, `(2)`)
+- [x] **V5:** True AI Intelligence (Local LLM reasoning & Interactive Wizard)
 - [ ] **Next**: Google Drive & OneDrive Integration
-- [ ] Duplicate Suffix Intelligence (`(1)`, `(2)`)

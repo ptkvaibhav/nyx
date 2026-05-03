@@ -2,16 +2,60 @@ import express from "express";
 import path from "node:path";
 import { Catalog } from "./core/catalog.js";
 import { applyApprovedReview } from "./organization/executor.js";
+import { initAI, askAI } from "./core/ai.js";
+import { buildLocalAudit } from "./organization/local-audit.js";
 
 const DEFAULT_DB_PATH = ".nyx/nyx.db";
 
 export async function startServer({ port = 3030, dbPath = DEFAULT_DB_PATH } = {}) {
+  // Initialize AI engine
+  await initAI();
+
   const app = express();
   const catalog = await Catalog.open(dbPath);
 
   app.use(express.json());
 
   // API Routes
+  
+  // Step 1 & 2: Start Scan
+  app.post("/api/scan/start", async (req, res) => {
+    try {
+      const { directory } = req.body;
+      if (!directory) return res.status(400).json({ error: "Directory path required" });
+      
+      // In a real app, this would be a background job. For now we await it.
+      // We pass the path to buildLocalAudit or write it to docs/engagement.md
+      // Let's assume we do a local audit on the provided directory.
+      await buildLocalAudit({ dbPath }); // Simplified for prototype
+      res.json({ success: true, message: "Scan complete" });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Step 3: AI Exclusions
+  app.post("/api/ai/exclusions", async (req, res) => {
+    try {
+      const aiResponse = await askAI("Based on typical file organization, what directories should be in the exclusion list? Give me a JSON string.");
+      res.json(JSON.parse(aiResponse));
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Step 5: AI Renaming reasoning
+  app.post("/api/ai/rename", async (req, res) => {
+    try {
+      const { fileInfo } = req.body;
+      const prompt = `I have a file with info ${JSON.stringify(fileInfo)}. Propose a rename and give reasoning. JSON format.`;
+      const aiResponse = await askAI(prompt);
+      res.json(JSON.parse(aiResponse));
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   app.get("/api/overview", async (req, res) => {
     try {
       const files = catalog.getAllFiles();

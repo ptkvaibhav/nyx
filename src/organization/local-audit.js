@@ -8,6 +8,7 @@ import { buildReviewQueue } from "./review-queue.js";
 import { scanManagedDirectories } from "./scan-managed.js";
 import { analyzeFileStructure } from "./structure.js";
 import { classifyFile } from "../core/classify.js";
+import { extractContent } from "../core/content-extractor.js";
 
 export async function buildLocalAudit({ 
   engagementPath = "docs/engagement.md",
@@ -34,6 +35,10 @@ export async function buildLocalAudit({
     }
 
     const profile = await fingerprintFile(scannedFile.absolutePath);
+    
+    // Extract content for deep intelligence (PDFs, txt, etc.)
+    profile.extractedText = await extractContent(scannedFile.absolutePath);
+
     const classification = classifyFile(profile);
     const structure = analyzeFileStructure({
       ...scannedFile,

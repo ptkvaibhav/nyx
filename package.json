@@ -43,6 +43,7 @@
   "dependencies": {
     "better-sqlite3": "^12.9.0",
     "express": "^5.2.1",
-    "open": "^11.0.0"
+    "open": "^11.0.0",
+    "pdf-parse": "^1.1.1"
   }
 }

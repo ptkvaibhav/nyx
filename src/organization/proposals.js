@@ -112,7 +112,10 @@ function buildRenameProposal(file) {
 
 function proposeFileName(file) {
   const purpose = file.structure?.purpose ?? file.classification?.category ?? "other";
-  const label = PURPOSE_LABELS[purpose] ?? PURPOSE_LABELS.other;
+  let label = file.structure?.renameLabel ?? PURPOSE_LABELS[purpose] ?? PURPOSE_LABELS.other;
+  
+  // If the renameLabel already contains a strong identifier (like Form_16_2024-25),
+  // we might not even need the hash, but let's keep it for safety to avoid collisions
   const shortHash = String(file.sha256 ?? "unhashed").slice(0, 8);
   const extension = file.extension ?? path.extname(file.absolutePath);
 

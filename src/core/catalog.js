@@ -75,8 +75,26 @@ export class Catalog {
 
   clearStaleFiles(scannedPaths) {
     if (scannedPaths.length === 0) return;
-    const placeholders = scannedPaths.map(() => "?").join(",");
-    this.db.prepare(`DELETE FROM files WHERE absolute_path NOT IN (${placeholders})`).run(...scannedPaths);
+    
+    // Create a set for fast lookup
+    const scannedSet = new Set(scannedPaths);
+    
+    // Get all existing paths
+    const existingPaths = this.db.prepare("SELECT absolute_path FROM files").all().map(row => row.absolute_path);
+    
+    // Find missing paths
+    const stalePaths = existingPaths.filter(p => !scannedSet.has(p));
+    
+    if (stalePaths.length === 0) return;
+
+    // Delete in a transaction
+    const deleteStmt = this.db.prepare("DELETE FROM files WHERE absolute_path = ?");
+    const transaction = this.db.transaction((paths) => {
+      for (const p of paths) {
+        deleteStmt.run(p);
+      }
+    });
+    transaction(stalePaths);
   }
 
   upsertReviewItem(item) {
