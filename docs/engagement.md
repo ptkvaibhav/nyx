@@ -10,13 +10,13 @@ Nyx must only scan directories listed here. All other paths are out of scope and
 
 Current selection:
 
+- `C:\Users\ptkva\Documents\nyx\File\pvaibhav`
 - `C:\Users\ptkva\Documents\nyx\File`
 
 User notes:
 
-- Add or remove managed directories here before running a full scan.
-- Do not include system directories unless you explicitly want them reviewed.
-- Nyx must never mutate files outside these approved roots.
+- Focus on personal documents and identity files.
+- Exclude large toolsets and VM images to keep scanning performance high.
 
 ## Safe Irrelevance File Rules
 
@@ -47,6 +47,37 @@ Nyx should skip these path segments during audit unless the user explicitly remo
 - `packages`
 - `Drive`
 - `.nyx`
+- `kali-linux`
+- `juice-shop`
+- `node-v24`
+- `flutter_windows`
+- `apache-maven`
+- `Fortify_SSC`
+- `ysoserial`
+- `DS4Windows`
+- `DVWA-master`
+- `B9ECED6F`
+- `gson-gson-parent`
+- `ilovepdf_unlocked`
+- `JSA`
+- `VMware-Tools`
+- `dependency-check`
+- `Fooocus_win64`
+- `memtest86-usb`
+- `Monaco 2`
+- `One Plus`
+- `Aero.7z`
+- `android-studio`
+- `burpsuite`
+- `Cursor Setup`
+- `CursorUserSetup`
+- `Docker Desktop`
+- `OllamaSetup`
+- `VirtualBox`
+- `VMware-Workstation`
+- `ZAP_2_16`
+- `ZoomInstaller`
+- `Linuc.7z`
 
 ## Structured File Definition
 

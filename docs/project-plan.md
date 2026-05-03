@@ -224,20 +224,19 @@ SQLite remains the right first persistence layer for this.
 - apply approved duplicate deletion
 - record audit and rollback metadata
 
-### V5: Cloud Audit - Mock Provider Implemented
+### V5: True AI Intelligence & Interactive Wizard - Implemented
 
-- Google Drive and OneDrive audit
-- cloud duplicate detection
-- cloud structure review
+- React Web Dashboard interactive step-by-step wizard
+- integration with `node-llama-cpp` for semantic reasoning
+- AI-driven exclusions, rename logic, and context awareness
+- deprecation of basic CLI flow in favor of `nyx` launching the dashboard
 
-The current implementation audits the local mock Drive scaffold, includes backup proof on uploads and dedupe skips, and reports duplicate fingerprints across mock providers. Real Google Drive and OneDrive APIs are not implemented yet.
+### V6: Cloud Bridge - Planned
 
-### V6: Protection And Archive - Mock Provider Implemented
-
-- redundant backup proof for important categories
-- cloud-only archival flow for lower-priority files
-
-The current implementation plans protection against the local mock Drive scaffold, marks important files as protected only when verified backup proof exists, creates archive proposals for lower-priority files with verified backup proof, and removes local copies only after approval. Real provider archival remains future work.
+- define cloud snapshot format
+- implement backup proposal engine
+- build local archival proposals
+- implement real cloud API flows (Google Drive & OneDrive)
 
 ## Security And Safety
 

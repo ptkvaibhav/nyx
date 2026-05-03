@@ -68,7 +68,8 @@ export function inferPurpose(fileEntry, classification = classifyFile(fileEntry)
     absolutePath: fileEntry.absolutePath,
     baseName: fileEntry.baseName ?? path.basename(fileEntry.absolutePath),
     extension: fileEntry.extension ?? path.extname(fileEntry.absolutePath),
-    category: classification.category
+    category: classification.category,
+    extractedText: fileEntry.extractedText ?? ""
   });
 }
 

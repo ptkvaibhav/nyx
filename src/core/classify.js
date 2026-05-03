@@ -47,13 +47,15 @@ const CATEGORY_PROVIDERS = {
 export function classifyFile(fileProfile) {
   const extension = fileProfile.extension ?? path.extname(fileProfile.absolutePath ?? "").toLowerCase();
   const baseName = (fileProfile.baseName ?? path.basename(fileProfile.absolutePath ?? "")).toLowerCase();
+  const extractedText = fileProfile.extractedText ?? "";
 
   const category = detectCategory(extension);
   const folderSegments = inferPurposeDetails({
     absolutePath: fileProfile.absolutePath,
     baseName,
     extension,
-    category
+    category,
+    extractedText
   }).expectedFolders;
 
   return {

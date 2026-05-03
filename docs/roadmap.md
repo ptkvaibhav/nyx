@@ -28,30 +28,15 @@
 - add rollback metadata and audit trail
 - keep generic review commands as aliases behind the clearer local organization workflow
 
-## V5 - Mock Provider Implemented, Real APIs Pending
+## V5 - Implemented
 
-- audit and organize cloud providers
-- verify backup proof for important content
+- transition to an interactive React Web Dashboard wizard
+- deprecate static CLI batch commands
+- integrate `node-llama-cpp` for on-device AI reasoning
+- dynamic exclusions and smart renaming based on AI explanations
+- chunked scanning and deep semantic folder context extraction
 
-Current implementation:
+## V6 - Planned For Cloud
 
-- audits the local mock Drive scaffold
-- records backup proof for local Drive uploads and dedupe skips
-- reports duplicate fingerprints across mock providers
-
-Pending real-provider work:
-
-- Google Drive API audit
-- OneDrive API audit
-- cloud-side move and rename proposals
-
-## V6 - Mock Provider Implemented, Real APIs Pending
-
-- report important files that still need backup proof
-- create approval-gated archive proposals for lower-priority files with verified mock-cloud proof
-- delete local copies only after approval and backup fingerprint verification
-
-Pending real-provider work:
-
-- cloud archival against Google Drive and OneDrive APIs
-- durable catalog storage for protection and archive state
+- apply approved local organization changes to cloud copies
+- Google Drive & OneDrive API integration
