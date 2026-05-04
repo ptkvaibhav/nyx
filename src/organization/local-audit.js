@@ -12,7 +12,9 @@ import { extractContent } from "../core/content-extractor.js";
 
 export async function buildLocalAudit({ 
   engagementPath = "docs/engagement.md",
-  dbPath = ".nyx/nyx.db" 
+  dbPath = ".nyx/nyx.db",
+  onProgress,
+  skippedFiles = []
 } = {}) {
   const engagement = await loadEngagement(engagementPath);
   const scanResult = await scanManagedDirectories({
@@ -24,7 +26,13 @@ export async function buildLocalAudit({
   const files = [];
   const scannedPaths = [];
 
+  let current = 0;
+  const total = scanResult.files.length;
+
   for (const scannedFile of scanResult.files) {
+    current++;
+    if (onProgress) onProgress(current, total, scannedFile.absolutePath);
+    
     scannedPaths.push(scannedFile.absolutePath);
     
     // Check if we already have this file and if it has changed
@@ -37,7 +45,21 @@ export async function buildLocalAudit({
     const profile = await fingerprintFile(scannedFile.absolutePath);
     
     // Extract content for deep intelligence (PDFs, txt, etc.)
-    profile.extractedText = await extractContent(scannedFile.absolutePath);
+    if (skippedFiles.includes(scannedFile.absolutePath)) {
+      profile.extractedText = "";
+    } else {
+      profile.extractedText = await extractContent(scannedFile.absolutePath);
+    }
+    const passwordRequired = profile.extractedText === "[[PASSWORD_REQUIRED]]";
+    
+    if (passwordRequired) {
+      // SAVE PROGRESS: Upsert the files we have processed so far so we don't scan them again
+      catalog.upsertFiles(files.filter(f => !f.lastScannedAt));
+      return {
+        needsPassword: true,
+        passwordFile: scannedFile.absolutePath
+      };
+    }
 
     const classification = classifyFile(profile);
     const structure = analyzeFileStructure({
@@ -50,7 +72,8 @@ export async function buildLocalAudit({
       ...scannedFile,
       ...profile,
       classification,
-      structure
+      structure,
+      passwordRequired
     };
 
     files.push(fileRecord);

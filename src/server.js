@@ -18,17 +18,67 @@ export async function startServer({ port = 3030, dbPath = DEFAULT_DB_PATH } = {}
 
   // API Routes
   
+  let currentScanProgress = { current: 0, total: 0, file: "" };
+
+  app.get("/api/scan/progress", (req, res) => {
+    res.json(currentScanProgress);
+  });
+
+  app.get("/api/select-directory", async (req, res) => {
+    try {
+      const { execSync } = await import("node:child_process");
+      const script = `
+        Add-Type -AssemblyName System.windows.forms
+        $f = New-Object System.Windows.Forms.FolderBrowserDialog
+        $f.ShowNewFolderButton = $false
+        if ($f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+          Write-Output $f.SelectedPath
+        }
+      `;
+      const result = execSync(`powershell.exe -NoProfile -Command "${script.replace(/\n/g, '; ')}"`, { encoding: 'utf8' }).trim();
+      res.json({ directory: result });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/add-password", async (req, res) => {
+    try {
+      const { password } = req.body;
+      const { loadConfig, saveConfig } = await import("./core/config.js");
+      const { config, configPath } = await loadConfig();
+      if (!config.pdfPasswords) config.pdfPasswords = [];
+      if (!config.pdfPasswords.includes(password)) {
+        config.pdfPasswords.push(password);
+        await saveConfig(config, configPath);
+      }
+      res.json({ success: true });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   // Step 1 & 2: Start Scan
   app.post("/api/scan/start", async (req, res) => {
     try {
-      const { directory } = req.body;
+      const { directory, skippedFiles } = req.body;
       if (!directory) return res.status(400).json({ error: "Directory path required" });
       
-      // In a real app, this would be a background job. For now we await it.
-      // We pass the path to buildLocalAudit or write it to docs/engagement.md
-      // Let's assume we do a local audit on the provided directory.
-      await buildLocalAudit({ dbPath }); // Simplified for prototype
-      res.json({ success: true, message: "Scan complete" });
+      currentScanProgress = { current: 0, total: 0, file: "" };
+      const audit = await buildLocalAudit({ 
+        dbPath,
+        skippedFiles: skippedFiles || [],
+        onProgress: (current, total, file) => {
+           currentScanProgress = { current, total, file };
+        }
+      });
+      
+      if (audit.needsPassword) {
+        res.json({ success: true, message: "Password required", needsPassword: true, passwordFile: audit.passwordFile });
+        return;
+      }
+      
+      res.json({ success: true, message: "Scan complete", needsPassword: false });
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
@@ -109,7 +159,8 @@ export async function startServer({ port = 3030, dbPath = DEFAULT_DB_PATH } = {}
   });
 
   // Serve UI static files
-  const uiPath = path.resolve("ui/dist");
+  const __dirname = path.dirname(new URL(import.meta.url).pathname).replace(/^\/([A-Za-z]:)/, '$1');
+  const uiPath = path.join(__dirname, "..", "ui", "dist");
   app.use(express.static(uiPath));
 
   // Final fallback for React routing - using a middleware without a path to avoid regex issues

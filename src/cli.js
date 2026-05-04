@@ -21,6 +21,7 @@ import { createMockProviderSnapshots } from "./providers/mock-snapshots.js";
 import { explainPricingStrategy } from "./advisory/pricing-catalog.js";
 import { Catalog } from "./core/catalog.js";
 import { startServer } from "./server.js";
+import { setupOllama } from "./core/ollama-manager.js";
 
 const [, , command, ...args] = process.argv;
 const DEFAULT_DB_PATH = ".nyx/nyx.db";
@@ -405,23 +406,13 @@ async function runUi(args) {
   const port = parseInt(args[0] ?? "3030", 10);
   const dbPath = args[1] ?? DEFAULT_DB_PATH;
   
-  const uiDistPath = path.resolve("ui", "dist", "index.html");
-  if (!(await exists(uiDistPath))) {
-    console.log("First time setup: Building the Nyx Dashboard UI...");
-    try {
-      const { execSync } = await import("node:child_process");
-      console.log("Installing UI dependencies...");
-      execSync("npm install", { cwd: path.resolve("ui"), stdio: "inherit", shell: true });
-      console.log("Building UI bundle...");
-      execSync("npm run build", { cwd: path.resolve("ui"), stdio: "inherit", shell: true });
-      console.log("UI build complete.");
-    } catch (error) {
-      console.error("Failed to build the UI automatically:", error.message);
-      console.log("Please cd into the 'ui' directory and run 'npm install && npm run build' manually.");
-      process.exitCode = 1;
-      return;
-    }
-  }
+  // Resolve the actual project root directory where the "ui" folder lives
+  // import.meta.url is file:///C:/path/to/nyx/src/cli.js
+  const __dirname = path.dirname(new URL(import.meta.url).pathname).replace(/^\/([A-Za-z]:)/, '$1');
+  const projectRoot = path.resolve(__dirname, "..");
+  const uiDistPath = path.join(projectRoot, "ui", "dist", "index.html");
+
+  await setupOllama();
 
   await startServer({ port, dbPath });
   try {
