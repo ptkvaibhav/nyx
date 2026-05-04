@@ -345,7 +345,7 @@ function App() {
                 
                 <h3 className="font-semibold text-lg mb-4 text-white">Recommended Exclusions Applied</h3>
                 <div className="flex gap-3 flex-wrap">
-                  {aiExclusions.exclusions.map(ex => (
+                  {(aiExclusions.exclusions || []).map(ex => (
                     <div key={ex} className="px-4 py-2 bg-slate-950 rounded-lg border border-slate-800 text-sm font-mono text-slate-300 shadow-inner">
                       {ex}
                     </div>

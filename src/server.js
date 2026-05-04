@@ -112,13 +112,30 @@ export async function startServer({ port = 3030, dbPath = DEFAULT_DB_PATH } = {}
     }
   });
 
+  function cleanJSON(str) {
+    try {
+      const match = str.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+      if (match) return match[1].trim();
+      return str.trim();
+    } catch (e) {
+      return str;
+    }
+  }
+
   // Step 3: AI Exclusions
   app.post("/api/ai/exclusions", async (req, res) => {
     try {
-      const aiResponse = await askAI("Based on typical file organization, what directories should be in the exclusion list? Give me a JSON string.");
-      res.json(JSON.parse(aiResponse));
+      const prompt = `Based on typical file organization, what directories should be in the exclusion list? Give me ONLY a raw JSON string like {"exclusions": ["folder1"], "reasoning": "why"}. No markdown, no intro.`;
+      const aiResponse = await askAI(prompt);
+      const clean = cleanJSON(aiResponse);
+      const parsed = JSON.parse(clean);
+      if (!Array.isArray(parsed.exclusions)) {
+         parsed.exclusions = ["node_modules", ".git", "Temp"];
+         parsed.reasoning = "AI generated malformed list. Defaulting to standard exclusions.";
+      }
+      res.json(parsed);
     } catch (error) {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: error.message, exclusions: ["node_modules", ".git", "Temp"], reasoning: "Failed to parse AI response. Using defaults." });
     }
   });
 
@@ -126,11 +143,12 @@ export async function startServer({ port = 3030, dbPath = DEFAULT_DB_PATH } = {}
   app.post("/api/ai/rename", async (req, res) => {
     try {
       const { fileInfo } = req.body;
-      const prompt = `I have a file with info ${JSON.stringify(fileInfo)}. Propose a rename and give reasoning. JSON format.`;
+      const prompt = `I have a file with info ${JSON.stringify(fileInfo)}. Propose a rename and give reasoning. Return ONLY a raw JSON string like {"proposedName": "file.pdf", "reasoning": "why"}. No markdown.`;
       const aiResponse = await askAI(prompt);
-      res.json(JSON.parse(aiResponse));
+      const clean = cleanJSON(aiResponse);
+      res.json(JSON.parse(clean));
     } catch (error) {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: error.message, reasoning: "AI parsing failed" });
     }
   });
 
