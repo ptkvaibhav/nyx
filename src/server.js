@@ -44,7 +44,35 @@ export async function startServer({ port = 3030, dbPath = DEFAULT_DB_PATH } = {}
 
   app.post("/api/add-password", async (req, res) => {
     try {
-      const { password } = req.body;
+      const { password, filePath } = req.body;
+      
+      // Test the password immediately if filePath is provided
+      if (filePath) {
+        const fs = await import("node:fs/promises");
+        const pdf = (await import("pdf-parse")).default;
+        const dataBuffer = await fs.readFile(filePath);
+        
+        let isValid = false;
+        
+        // Inline parsePdfSilently equivalent for the route
+        const originalWarn = console.warn;
+        console.warn = () => {};
+        try {
+          const PDFJS = (await import("pdf-parse/lib/pdf.js/v1.10.100/build/pdf.js")).default || require("pdf-parse/lib/pdf.js/v1.10.100/build/pdf.js");
+          PDFJS.disableWorker = true;
+          await PDFJS.getDocument({ data: dataBuffer, password });
+          isValid = true;
+        } catch (e) {
+          isValid = false;
+        } finally {
+          console.warn = originalWarn;
+        }
+        
+        if (!isValid) {
+          return res.json({ success: false, error: "Incorrect password for this file" });
+        }
+      }
+
       const { loadConfig, saveConfig } = await import("./core/config.js");
       const { config, configPath } = await loadConfig();
       if (!config.pdfPasswords) config.pdfPasswords = [];

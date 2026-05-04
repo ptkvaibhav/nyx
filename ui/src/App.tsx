@@ -28,6 +28,7 @@ function App() {
   const [needsPassword, setNeedsPassword] = useState(false);
   const [passwordFile, setPasswordFile] = useState("");
   const [pdfPassword, setPdfPassword] = useState("");
+  const [passwordError, setPasswordError] = useState("");
   const [skippedPasswordFiles, setSkippedPasswordFiles] = useState<string[]>([]);
   const [scanProgress, setScanProgress] = useState({ current: 0, total: 0, file: "" });
   
@@ -98,6 +99,7 @@ function App() {
       
       if (data.needsPassword) {
          setNeedsPassword(true);
+         setPasswordError("");
          setPasswordFile(data.passwordFile || "Unknown File");
          setScanning(false);
          return;
@@ -123,16 +125,25 @@ function App() {
   const submitPassword = async () => {
     if (!pdfPassword) return;
     try {
-      await fetch('/api/add-password', {
+      const res = await fetch('/api/add-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: pdfPassword })
+        body: JSON.stringify({ password: pdfPassword, filePath: passwordFile })
       });
+      const data = await res.json();
+      
+      if (!data.success) {
+         setPasswordError(data.error || "Incorrect password");
+         return;
+      }
+      
       setNeedsPassword(false);
+      setPasswordError("");
       setPdfPassword("");
       startScan();
     } catch (e) {
       console.error(e);
+      setPasswordError("Server error verifying password");
     }
   };
 
@@ -140,6 +151,7 @@ function App() {
     const newSkipped = [...skippedPasswordFiles, passwordFile];
     setSkippedPasswordFiles(newSkipped);
     setNeedsPassword(false);
+    setPasswordError("");
     setPdfPassword("");
     startScan(newSkipped);
   };
@@ -267,10 +279,11 @@ function App() {
                    type="password" 
                    value={pdfPassword}
                    onChange={e => setPdfPassword(e.target.value)}
-                   className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-center text-xl tracking-widest focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 mb-4"
+                   className={`w-full bg-slate-950 border ${passwordError ? 'border-rose-500 focus:ring-rose-500' : 'border-slate-700 focus:border-amber-500 focus:ring-amber-500'} rounded-xl px-4 py-3 text-center text-xl tracking-widest focus:outline-none focus:ring-1 mb-2`}
                    placeholder="••••••••"
                  />
-                 <div className="flex gap-4">
+                 {passwordError && <p className="text-rose-500 text-sm font-bold mb-4">{passwordError}</p>}
+                 <div className="flex gap-4 mt-2">
                    <button onClick={submitPassword} className="flex-1 bg-amber-600 hover:bg-amber-500 text-white font-bold py-3 rounded-xl transition-all text-sm">
                      Save & Continue
                    </button>

@@ -70,5 +70,11 @@
     "quotaWarningPercent": 85,
     "staleFileDays": 730,
     "pricingRefreshDays": 14
-  }
+  },
+  "ai": {
+    "model": "gemma4:latest"
+  },
+  "pdfPasswords": [
+    "PRAT1997"
+  ]
 }
