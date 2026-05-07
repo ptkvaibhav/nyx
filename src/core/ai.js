@@ -1,9 +1,10 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
+import { loadConfig } from "./config.js";
 
 const OLLAMA_URL = "http://localhost:11434/api/chat";
-const OLLAMA_MODEL = "gemma"; // Assuming the user pulled 'gemma' or 'gemma:4b' or 'gemma:7b'. We will use 'gemma' as the default tag.
+let OLLAMA_MODEL = "gemma"; 
 
 export async function initAI(mock = false) {
   if (mock) {
@@ -12,6 +13,11 @@ export async function initAI(mock = false) {
   }
   
   try {
+    const { config } = await loadConfig();
+    if (config.ai?.model) {
+      OLLAMA_MODEL = config.ai.model;
+    }
+
     // Ping Ollama to see if it's running
     const response = await fetch("http://localhost:11434/api/tags");
     if (!response.ok) {

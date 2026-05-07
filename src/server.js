@@ -18,29 +18,124 @@ export async function startServer({ port = 3030, dbPath = DEFAULT_DB_PATH } = {}
 
   // API Routes
   
+  let currentScanProgress = { current: 0, total: 0, file: "" };
+
+  app.get("/api/scan/progress", (req, res) => {
+    res.json(currentScanProgress);
+  });
+
+  app.get("/api/select-directory", async (req, res) => {
+    try {
+      const { execSync } = await import("node:child_process");
+      const script = `
+        Add-Type -AssemblyName System.windows.forms
+        $f = New-Object System.Windows.Forms.FolderBrowserDialog
+        $f.ShowNewFolderButton = $false
+        if ($f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+          Write-Output $f.SelectedPath
+        }
+      `;
+      const result = execSync(`powershell.exe -NoProfile -Command "${script.replace(/\n/g, '; ')}"`, { encoding: 'utf8' }).trim();
+      res.json({ directory: result });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/add-password", async (req, res) => {
+    try {
+      const { password, filePath } = req.body;
+      
+      // Test the password immediately if filePath is provided
+      if (filePath) {
+        const fs = await import("node:fs/promises");
+        const pdf = (await import("pdf-parse")).default;
+        const dataBuffer = await fs.readFile(filePath);
+        
+        let isValid = false;
+        
+        // Inline parsePdfSilently equivalent for the route
+        const originalWarn = console.warn;
+        console.warn = () => {};
+        try {
+          const PDFJS = (await import("pdf-parse/lib/pdf.js/v1.10.100/build/pdf.js")).default || require("pdf-parse/lib/pdf.js/v1.10.100/build/pdf.js");
+          PDFJS.disableWorker = true;
+          await PDFJS.getDocument({ data: dataBuffer, password });
+          isValid = true;
+        } catch (e) {
+          isValid = false;
+        } finally {
+          console.warn = originalWarn;
+        }
+        
+        if (!isValid) {
+          return res.json({ success: false, error: "Incorrect password for this file" });
+        }
+      }
+
+      const { loadConfig, saveConfig } = await import("./core/config.js");
+      const { config, configPath } = await loadConfig();
+      if (!config.pdfPasswords) config.pdfPasswords = [];
+      if (!config.pdfPasswords.includes(password)) {
+        config.pdfPasswords.push(password);
+        await saveConfig(config, configPath);
+      }
+      res.json({ success: true });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   // Step 1 & 2: Start Scan
   app.post("/api/scan/start", async (req, res) => {
     try {
-      const { directory } = req.body;
+      const { directory, skippedFiles } = req.body;
       if (!directory) return res.status(400).json({ error: "Directory path required" });
       
-      // In a real app, this would be a background job. For now we await it.
-      // We pass the path to buildLocalAudit or write it to docs/engagement.md
-      // Let's assume we do a local audit on the provided directory.
-      await buildLocalAudit({ dbPath }); // Simplified for prototype
-      res.json({ success: true, message: "Scan complete" });
+      currentScanProgress = { current: 0, total: 0, file: "" };
+      const audit = await buildLocalAudit({ 
+        dbPath,
+        skippedFiles: skippedFiles || [],
+        onProgress: (current, total, file) => {
+           currentScanProgress = { current, total, file };
+        }
+      });
+      
+      if (audit.needsPassword) {
+        res.json({ success: true, message: "Password required", needsPassword: true, passwordFile: audit.passwordFile });
+        return;
+      }
+      
+      res.json({ success: true, message: "Scan complete", needsPassword: false });
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
   });
 
+  function cleanJSON(str) {
+    try {
+      const match = str.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+      if (match) return match[1].trim();
+      return str.trim();
+    } catch (e) {
+      return str;
+    }
+  }
+
   // Step 3: AI Exclusions
   app.post("/api/ai/exclusions", async (req, res) => {
     try {
-      const aiResponse = await askAI("Based on typical file organization, what directories should be in the exclusion list? Give me a JSON string.");
-      res.json(JSON.parse(aiResponse));
+      const prompt = `Based on typical file organization, what directories should be in the exclusion list? Give me ONLY a raw JSON string like {"exclusions": ["folder1"], "reasoning": "why"}. No markdown, no intro.`;
+      const aiResponse = await askAI(prompt);
+      const clean = cleanJSON(aiResponse);
+      const parsed = JSON.parse(clean);
+      if (!Array.isArray(parsed.exclusions)) {
+         parsed.exclusions = ["node_modules", ".git", "Temp"];
+         parsed.reasoning = "AI generated malformed list. Defaulting to standard exclusions.";
+      }
+      res.json(parsed);
     } catch (error) {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: error.message, exclusions: ["node_modules", ".git", "Temp"], reasoning: "Failed to parse AI response. Using defaults." });
     }
   });
 
@@ -48,11 +143,12 @@ export async function startServer({ port = 3030, dbPath = DEFAULT_DB_PATH } = {}
   app.post("/api/ai/rename", async (req, res) => {
     try {
       const { fileInfo } = req.body;
-      const prompt = `I have a file with info ${JSON.stringify(fileInfo)}. Propose a rename and give reasoning. JSON format.`;
+      const prompt = `I have a file with info ${JSON.stringify(fileInfo)}. Propose a rename and give reasoning. Return ONLY a raw JSON string like {"proposedName": "file.pdf", "reasoning": "why"}. No markdown.`;
       const aiResponse = await askAI(prompt);
-      res.json(JSON.parse(aiResponse));
+      const clean = cleanJSON(aiResponse);
+      res.json(JSON.parse(clean));
     } catch (error) {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: error.message, reasoning: "AI parsing failed" });
     }
   });
 
@@ -109,7 +205,8 @@ export async function startServer({ port = 3030, dbPath = DEFAULT_DB_PATH } = {}
   });
 
   // Serve UI static files
-  const uiPath = path.resolve("ui/dist");
+  const __dirname = path.dirname(new URL(import.meta.url).pathname).replace(/^\/([A-Za-z]:)/, '$1');
+  const uiPath = path.join(__dirname, "..", "ui", "dist");
   app.use(express.static(uiPath));
 
   // Final fallback for React routing - using a middleware without a path to avoid regex issues
