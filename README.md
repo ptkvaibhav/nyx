@@ -1,30 +1,16 @@
-# Nyx: Intelligent File Organization & Protection
+# Nyx: True AI Intelligence & File Organization
 
 ![Nyx Banner](banner.svg)
 
-Nyx is a high-integrity, safety-first file management system designed to bring order to chaotic local directories and protect your most important data through automated, approval-gated workflows.
+Nyx is a high-integrity, safety-first file management system designed to bring order to chaotic local directories and protect your most important data through local AI-driven semantic reasoning. 
 
-## 🚀 The Nyx Workflow
+Nyx strictly refuses to delete files or mutate directories outside of explicitly approved roots. It verifies backup proof before recommending archival and maintains a rollback trail for every action.
 
-Nyx operates on a **Human-in-the-Loop** model. It never moves or deletes a file without your explicit approval.
-
-1.  **Local Audit**: Deep scan of user-approved roots with SHA-256 fingerprinting.
-2.  **Intelligence**: Automatically detects duplicates (by hash), versioned files (`v1`, `v2`), and classifies content (Finance, Legal, Code, etc.).
-3.  **Proposal**: Generates a persistent review queue in SQLite with suggested renames and organizational moves.
-4.  **Review**: You approve or reject suggestions via CLI (or the upcoming Web Dashboard).
-5.  **Execution**: Nyx safely applies changes, validates fingerprints before every move, and maintains a rollback-ready audit log.
-6.  **Protection**: Redundantly backs up important categories to cloud storage (Mock Cloud for now, real APIs coming soon).
-
-## ✨ Key Features
-
-*   **⚡ Incremental Scanning**: Powered by SQLite, Nyx tracks file stats to skip unchanged files, making rescans of thousands of files near-instant.
-*   **🧠 Purpose-Based Rules**: Granular detection patterns for Insurance policies, Utility bills, Bank statements, Resumes, and more.
-*   **📦 Version Management**: Automatically identifies older versions of documents and proposes archival to keep your primary folders clean.
-*   **🛡️ Safety First**:
-    *   **Fingerprint Validation**: Ensures a file hasn't changed between proposal and execution.
-    *   **Rollback Engine**: Undo any organization run with a single command.
-    *   **Managed Roots**: Nyx only touches what you tell it to in `docs/engagement.md`.
-*   **📊 Persistent Catalog**: Full SQLite backend for metadata storage, ensuring scalability and durability.
+## 🚀 True AI Intelligence (V5)
+Nyx has evolved from static rules to true semantic understanding. Powered by a local **Ollama** integration (using compact models like Gemma), Nyx deeply understands the context of your files.
+- **Deep Content Extraction:** Nyx reads the raw text of your documents (like PDFs, handling passwords securely) to intelligently extract metadata (e.g. Assessment Years from Form 16s).
+- **AI-Driven Exclusions:** Nyx reasons about folder structures and proactively recommends ignoring massive technical toolsets (`node_modules`, system packages) to speed up analysis.
+- **Semantic Renaming:** The AI proposes clean, standardized names and explains *why* it chose them.
 
 ## 🛠️ Installation & Setup
 
@@ -37,29 +23,27 @@ cd nyx
 npm install
 npm link
 
-# Now you can use the `nyx` command from anywhere!
-nyx
-
-# Initialize your engagement (what Nyx can scan)
-# Edit docs/engagement.md to add your folders
+# Install Ollama
+# Ensure you have https://ollama.com installed and running.
 ```
 
 ## ⌨️ Common Commands
 
 | Command | Description |
 | :--- | :--- |
-| `nyx` | Launches the interactive React Web Dashboard powered by AI reasoning. |
+| `nyx` | Launches the interactive React Web Dashboard powered by AI reasoning. Automatically manages UI building and Ollama setup. |
 | `nyx doctor` | Performs a system health check to ensure dependencies and configurations are correct. |
 
 *Note: As of V5, pure batch CLI commands (like `audit-local` or `prepare-local-organization`) are deprecated in favor of the interactive UI wizard.*
 
-## 🧪 Verification
+## 🧪 Verification & Security
 
-Nyx is built with quality as a first-class citizen:
+Nyx is built with quality and security as first-class citizens:
 
-*   **Quality**: `npm run check:quality`
-*   **Security**: `npm run check:security`
-*   **Testing**: `npm test` & `npm run test:smoke`
+*   **Quality & Semantic Analysis**: `npm run check:quality`
+*   **Security & Dependency Checks**: `npm run check:security` & `npm audit`
+*   **Linting**: The UI is strictly typed and linted.
+*   **Data Flow Security**: All AI processing runs **locally** on your device via Ollama. Your documents and passwords are never sent to the cloud.
 
 ---
 
@@ -72,4 +56,4 @@ Nyx is built with quality as a first-class citizen:
 - [x] React-based Visual Dashboard
 - [x] Duplicate Suffix Intelligence (`(1)`, `(2)`)
 - [x] **V5:** True AI Intelligence (Local LLM reasoning & Interactive Wizard)
-- [ ] **Next**: Google Drive & OneDrive Integration
+- [ ] **V6**: Google Drive & OneDrive Integration

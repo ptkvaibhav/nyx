@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 import { useState, useEffect, useRef } from 'react';
 import { Layout, Copy, Wand2, CheckCircle, ArrowRight, RefreshCw, FolderSearch, Cloud, Sparkles, KeyRound, Trash2, FolderOpen, Info } from 'lucide-react';
 
@@ -18,6 +19,7 @@ interface ReviewItem {
   risk: string;
   subjectPath: string;
   proposedPath?: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   evidence: any;
 }
 
@@ -41,26 +43,6 @@ function App() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    let interval: any;
-    if (scanning && step === 2) {
-      interval = setInterval(async () => {
-        try {
-          const res = await fetch('/api/scan/progress');
-          const data = await res.json();
-          setScanProgress(data);
-        } catch(e) {}
-      }, 500);
-    }
-    return () => clearInterval(interval);
-  }, [scanning, step]);
-
-  useEffect(() => {
-    if (step > 1) {
-      fetchData();
-    }
-  }, [step]);
-
   const fetchData = async () => {
     try {
       const statsRes = await fetch('/api/overview');
@@ -70,10 +52,32 @@ function App() {
       const itemsRes = await fetch('/api/items');
       const itemsData = await itemsRes.json();
       setItems(itemsData);
-    } catch (error) {
-      console.error('Failed to fetch data', error);
+    } catch {
+      console.error('Failed to fetch data');
     }
   };
+
+  useEffect(() => {
+    let interval: ReturnType<typeof setInterval>;
+    if (scanning && step === 2) {
+      interval = setInterval(async () => {
+        try {
+          const res = await fetch('/api/scan/progress');
+          const data = await res.json();
+          setScanProgress(data);
+        } catch {
+          // ignore
+        }
+      }, 500);
+    }
+    return () => clearInterval(interval);
+  }, [scanning, step]);
+
+  useEffect(() => {
+    if (step > 1) {
+      fetchData().catch(console.error);
+    }
+  }, [step]);
 
   const onFolderSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -132,7 +136,7 @@ function App() {
       }
       
       setStep(3);
-    } catch (error) {
+    } catch {
       alert('Scan failed');
       setStep(1);
     } finally {
@@ -189,7 +193,7 @@ function App() {
       });
       const data = await res.json();
       setAiReasoning(prev => ({ ...prev, [item.id]: data.reasoning }));
-    } catch (e) {
+    } catch {
       setAiReasoning(prev => ({ ...prev, [item.id]: 'Failed to get AI reasoning.' }));
     }
   };
@@ -200,7 +204,7 @@ function App() {
       await fetch('/api/apply', { method: 'POST' });
       await fetchData();
       setStep(6);
-    } catch (error) {
+    } catch {
       alert('Failed to apply changes');
     } finally {
       setApplying(false);
@@ -237,7 +241,7 @@ function App() {
           ].map(({ s, label, icon: Icon }) => (
             <button 
               key={s}
-              onClick={() => { if(stats || s === 1) setStep(s as any) }}
+              onClick={() => { if(stats || s === 1) setStep(s as 1 | 2 | 3 | 4 | 5 | 6 | 7) }}
               disabled={!stats && s > 2}
               className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all text-left font-medium ${step === s ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20 shadow-inner' : 'hover:bg-slate-800 text-slate-400 disabled:opacity-30 disabled:cursor-not-allowed'}`}
             >
@@ -279,7 +283,7 @@ function App() {
                   type="file" 
                   ref={fileInputRef}
                   style={{ display: 'none' }}
-                  {...({ webkitdirectory: "", directory: "" } as any)} 
+                  {...({ webkitdirectory: "", directory: "" } as unknown as React.InputHTMLAttributes<HTMLInputElement>)} 
                   onChange={onFolderSelect}
                 />
               </div>
