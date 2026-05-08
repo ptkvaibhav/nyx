@@ -12,14 +12,29 @@ import { extractContent } from "../core/content-extractor.js";
 
 export async function buildLocalAudit({ 
   engagementPath = "docs/engagement.md",
+  targetDirectory,
   dbPath = ".nyx/nyx.db",
   onProgress,
   skippedFiles = []
 } = {}) {
-  const engagement = await loadEngagement(engagementPath);
+  // If targetDirectory is provided, we use that. Otherwise fallback to engagement.md parsing.
+  let managedDirectories = targetDirectory ? [targetDirectory] : [];
+  let exclusions = [".git", "node_modules", "Temp", "packages", "Drive", ".nyx"];
+  let engagement = null;
+  
+  if (!targetDirectory) {
+    try {
+      engagement = await loadEngagement(engagementPath);
+      managedDirectories = engagement.managedDirectories;
+      exclusions = engagement.defaultExclusions;
+    } catch (e) {
+      console.warn("Could not load engagement.md, using default exclusions.", e.message);
+    }
+  }
+
   const scanResult = await scanManagedDirectories({
-    managedDirectories: engagement.managedDirectories,
-    exclusions: engagement.defaultExclusions
+    managedDirectories,
+    exclusions
   });
 
   const catalog = await Catalog.open(dbPath);
@@ -93,7 +108,7 @@ export async function buildLocalAudit({
     duplicates,
     files,
     directories: scanResult.directories,
-    configuredRules: engagement.safeIrrelevanceRules
+    configuredRules: engagement?.safeIrrelevanceRules || []
   });
   
   const reviewQueue = buildReviewQueue({
@@ -105,9 +120,9 @@ export async function buildLocalAudit({
   catalog.upsertReviewItems(reviewQueue.items);
 
   return {
-    engagementPath: engagement.engagementPath,
-    managedDirectories: engagement.managedDirectories,
-    exclusions: engagement.defaultExclusions,
+    engagementPath: engagement?.engagementPath || "dynamic",
+    managedDirectories,
+    exclusions,
     missingDirectories: scanResult.missingDirectories,
     totals: {
       filesScanned: files.length,

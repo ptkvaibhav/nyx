@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Layout, Copy, Wand2, CheckCircle, ArrowRight, RefreshCw, FolderSearch, Cloud, Sparkles, FolderOpen, KeyRound, Trash2 } from 'lucide-react';
+import { Layout, Copy, Wand2, CheckCircle, ArrowRight, RefreshCw, FolderSearch, Cloud, Sparkles, KeyRound, Trash2 } from 'lucide-react';
 
 interface Stats {
   totalFiles: number;
@@ -70,18 +70,6 @@ function App() {
       setItems(itemsData);
     } catch (error) {
       console.error('Failed to fetch data', error);
-    }
-  };
-
-  const selectDirectory = async () => {
-    try {
-      const res = await fetch('/api/select-directory');
-      const data = await res.json();
-      if (data.directory) {
-        setDirectory(data.directory);
-      }
-    } catch (e) {
-      console.error("Failed to pick directory", e);
     }
   };
 
@@ -247,12 +235,6 @@ function App() {
                   className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-slate-100 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-all font-mono text-sm"
                   placeholder="C:\Path\To\Your\Files"
                 />
-                <button 
-                  onClick={selectDirectory}
-                  className="bg-slate-800 hover:bg-slate-700 border border-slate-700 px-5 py-3 rounded-xl font-semibold transition-all flex items-center gap-2"
-                >
-                  <FolderOpen className="w-4 h-4" /> Browse
-                </button>
               </div>
               
               <button 
@@ -329,7 +311,7 @@ function App() {
             <header className="flex justify-between items-end border-b border-slate-800 pb-6">
               <div>
                 <h1 className="text-4xl font-bold flex items-center gap-3 tracking-tight"><Sparkles className="text-amber-400 w-8 h-8"/> AI Exclusions Review</h1>
-                <p className="text-slate-400 mt-2 text-lg">Nyx AI has identified directories that should be skipped.</p>
+                <p className="text-slate-400 mt-2 text-lg">Nyx AI has identified directories that should be skipped. Uncheck any you want to scan.</p>
               </div>
               <button onClick={() => setStep(4)} className="bg-white text-slate-950 font-bold px-6 py-3 rounded-xl flex items-center gap-2 hover:bg-slate-200 transition-all shadow-lg">
                 Continue <ArrowRight className="w-4 h-4"/>
@@ -346,9 +328,14 @@ function App() {
                 <h3 className="font-semibold text-lg mb-4 text-white">Recommended Exclusions Applied</h3>
                 <div className="flex gap-3 flex-wrap">
                   {(aiExclusions.exclusions || []).map(ex => (
-                    <div key={ex} className="px-4 py-2 bg-slate-950 rounded-lg border border-slate-800 text-sm font-mono text-slate-300 shadow-inner">
+                    <label key={ex} className="flex items-center gap-2 px-4 py-2 bg-slate-950 rounded-lg border border-slate-800 text-sm font-mono text-slate-300 shadow-inner cursor-pointer hover:bg-slate-800">
+                      <input 
+                        type="checkbox" 
+                        defaultChecked={true}
+                        className="w-4 h-4 rounded border-slate-700 text-sky-500 focus:ring-sky-500 focus:ring-offset-slate-950" 
+                      />
                       {ex}
-                    </div>
+                    </label>
                   ))}
                 </div>
               </div>
