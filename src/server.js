@@ -54,13 +54,10 @@ export async function startServer({ port = 3030, dbPath = DEFAULT_DB_PATH } = {}
         
         let isValid = false;
         
-        // Inline parsePdfSilently equivalent for the route
         const originalWarn = console.warn;
         console.warn = () => {};
         try {
-          const PDFJS = (await import("pdf-parse/lib/pdf.js/v1.10.100/build/pdf.js")).default || require("pdf-parse/lib/pdf.js/v1.10.100/build/pdf.js");
-          PDFJS.disableWorker = true;
-          await PDFJS.getDocument({ data: dataBuffer, password });
+          await pdf(dataBuffer, { password });
           isValid = true;
         } catch (e) {
           isValid = false;
@@ -95,6 +92,7 @@ export async function startServer({ port = 3030, dbPath = DEFAULT_DB_PATH } = {}
       currentScanProgress = { current: 0, total: 0, file: "" };
       const audit = await buildLocalAudit({ 
         dbPath,
+        targetDirectory: directory,
         skippedFiles: skippedFiles || [],
         onProgress: (current, total, file) => {
            currentScanProgress = { current, total, file };

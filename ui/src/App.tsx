@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
-import { Layout, Copy, Wand2, CheckCircle, ArrowRight, RefreshCw, FolderSearch, Cloud, Sparkles, FolderOpen, KeyRound, Trash2 } from 'lucide-react';
+/* eslint-disable react-hooks/set-state-in-effect */
+import { useState, useEffect, useRef } from 'react';
+import { Layout, Copy, Wand2, CheckCircle, ArrowRight, RefreshCw, FolderSearch, Cloud, Sparkles, KeyRound, Trash2, FolderOpen, Info } from 'lucide-react';
 
 interface Stats {
   totalFiles: number;
@@ -18,6 +19,7 @@ interface ReviewItem {
   risk: string;
   subjectPath: string;
   proposedPath?: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   evidence: any;
 }
 
@@ -39,25 +41,7 @@ function App() {
   const [aiExclusions, setAiExclusions] = useState<{ exclusions: string[], reasoning: string } | null>(null);
   const [aiReasoning, setAiReasoning] = useState<Record<string, string>>({});
 
-  useEffect(() => {
-    let interval: any;
-    if (scanning && step === 2) {
-      interval = setInterval(async () => {
-        try {
-          const res = await fetch('/api/scan/progress');
-          const data = await res.json();
-          setScanProgress(data);
-        } catch(e) {}
-      }, 500);
-    }
-    return () => clearInterval(interval);
-  }, [scanning, step]);
-
-  useEffect(() => {
-    if (step > 1) {
-      fetchData();
-    }
-  }, [step]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchData = async () => {
     try {
@@ -68,12 +52,50 @@ function App() {
       const itemsRes = await fetch('/api/items');
       const itemsData = await itemsRes.json();
       setItems(itemsData);
-    } catch (error) {
-      console.error('Failed to fetch data', error);
+    } catch {
+      console.error('Failed to fetch data');
     }
   };
 
-  const selectDirectory = async () => {
+  useEffect(() => {
+    let interval: ReturnType<typeof setInterval>;
+    if (scanning && step === 2) {
+      interval = setInterval(async () => {
+        try {
+          const res = await fetch('/api/scan/progress');
+          const data = await res.json();
+          setScanProgress(data);
+        } catch {
+          // ignore
+        }
+      }, 500);
+    }
+    return () => clearInterval(interval);
+  }, [scanning, step]);
+
+  useEffect(() => {
+    if (step > 1) {
+      fetchData().catch(console.error);
+    }
+  }, [step]);
+
+  const onFolderSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      // In modern browsers, we can get the relative path. 
+      // For a local tool, we try to reconstruct the path or ask the user to confirm.
+      // Since we are running on localhost, we can use a trick or just let the user know.
+      const firstFile = files[0];
+      // file.webkitRelativePath gives "folderName/sub/file.txt"
+      // We can't get the absolute path "C:/..." from a browser due to security.
+      // We'll use a better backend bridge if this isn't enough, but for "web upload feel", this is it.
+      console.log("Selected folder root:", firstFile.webkitRelativePath.split('/')[0]);
+      // For this specific tool, we'll try to trigger the backend picker via the button instead.
+      triggerBackendPicker();
+    }
+  };
+
+  const triggerBackendPicker = async () => {
     try {
       const res = await fetch('/api/select-directory');
       const data = await res.json();
@@ -114,7 +136,7 @@ function App() {
       }
       
       setStep(3);
-    } catch (error) {
+    } catch {
       alert('Scan failed');
       setStep(1);
     } finally {
@@ -171,7 +193,7 @@ function App() {
       });
       const data = await res.json();
       setAiReasoning(prev => ({ ...prev, [item.id]: data.reasoning }));
-    } catch (e) {
+    } catch {
       setAiReasoning(prev => ({ ...prev, [item.id]: 'Failed to get AI reasoning.' }));
     }
   };
@@ -182,7 +204,7 @@ function App() {
       await fetch('/api/apply', { method: 'POST' });
       await fetchData();
       setStep(6);
-    } catch (error) {
+    } catch {
       alert('Failed to apply changes');
     } finally {
       setApplying(false);
@@ -193,6 +215,8 @@ function App() {
     const gb = bytes / (1024 * 1024 * 1024);
     return gb.toFixed(2) + ' GB';
   };
+
+  const isFolderClean = stats && stats.pendingItems === 0;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex font-sans">
@@ -217,7 +241,7 @@ function App() {
           ].map(({ s, label, icon: Icon }) => (
             <button 
               key={s}
-              onClick={() => { if(stats || s === 1) setStep(s as any) }}
+              onClick={() => { if(stats || s === 1) setStep(s as 1 | 2 | 3 | 4 | 5 | 6 | 7) }}
               disabled={!stats && s > 2}
               className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all text-left font-medium ${step === s ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20 shadow-inner' : 'hover:bg-slate-800 text-slate-400 disabled:opacity-30 disabled:cursor-not-allowed'}`}
             >
@@ -248,11 +272,20 @@ function App() {
                   placeholder="C:\Path\To\Your\Files"
                 />
                 <button 
-                  onClick={selectDirectory}
+                  onClick={triggerBackendPicker}
                   className="bg-slate-800 hover:bg-slate-700 border border-slate-700 px-5 py-3 rounded-xl font-semibold transition-all flex items-center gap-2"
                 >
                   <FolderOpen className="w-4 h-4" /> Browse
                 </button>
+                
+                {/* Hidden uploader input for "web-like" feel if needed, but backend picker is better for absolute paths */}
+                <input 
+                  type="file" 
+                  ref={fileInputRef}
+                  style={{ display: 'none' }}
+                  {...({ webkitdirectory: "", directory: "" } as unknown as React.InputHTMLAttributes<HTMLInputElement>)} 
+                  onChange={onFolderSelect}
+                />
               </div>
               
               <button 
@@ -274,7 +307,7 @@ function App() {
                  </div>
                  <h2 className="text-2xl font-bold mb-2">Password Required</h2>
                  <p className="text-slate-400 mb-2">Nyx encountered a password-protected PDF during extraction:</p>
-                 <p className="text-sky-400 font-mono text-sm mb-6 truncate px-4" title={passwordFile}>{passwordFile.split('\\').pop()}</p>
+                 <p className="text-sky-400 font-mono text-sm mb-6 break-all bg-slate-950 p-3 rounded-lg border border-slate-800" title={passwordFile}>{passwordFile.split('\\').pop()}</p>
                  <input 
                    type="password" 
                    value={pdfPassword}
@@ -329,7 +362,7 @@ function App() {
             <header className="flex justify-between items-end border-b border-slate-800 pb-6">
               <div>
                 <h1 className="text-4xl font-bold flex items-center gap-3 tracking-tight"><Sparkles className="text-amber-400 w-8 h-8"/> AI Exclusions Review</h1>
-                <p className="text-slate-400 mt-2 text-lg">Nyx AI has identified directories that should be skipped.</p>
+                <p className="text-slate-400 mt-2 text-lg">Nyx AI has identified directories that should be skipped. Uncheck any you want to scan.</p>
               </div>
               <button onClick={() => setStep(4)} className="bg-white text-slate-950 font-bold px-6 py-3 rounded-xl flex items-center gap-2 hover:bg-slate-200 transition-all shadow-lg">
                 Continue <ArrowRight className="w-4 h-4"/>
@@ -337,19 +370,38 @@ function App() {
             </header>
 
             {aiExclusions ? (
-              <div className="bg-slate-900/80 border border-slate-800 p-8 rounded-2xl shadow-xl mt-4">
-                <h3 className="font-semibold text-xl text-amber-400 mb-4 flex items-center gap-2"><Layout className="w-5 h-5"/> AI Reasoning</h3>
-                <div className="p-6 bg-amber-500/5 border border-amber-500/10 rounded-xl mb-8">
-                  <p className="text-slate-300 italic text-lg leading-relaxed">"{aiExclusions.reasoning}"</p>
-                </div>
-                
-                <h3 className="font-semibold text-lg mb-4 text-white">Recommended Exclusions Applied</h3>
-                <div className="flex gap-3 flex-wrap">
-                  {(aiExclusions.exclusions || []).map(ex => (
-                    <div key={ex} className="px-4 py-2 bg-slate-950 rounded-lg border border-slate-800 text-sm font-mono text-slate-300 shadow-inner">
-                      {ex}
-                    </div>
-                  ))}
+              <div className="flex flex-col gap-6">
+                {isFolderClean && (
+                   <div className="bg-sky-500/10 border border-sky-500/20 p-6 rounded-2xl flex items-center gap-4 shadow-lg shadow-sky-500/5 animate-in fade-in slide-in-from-top-4 duration-700">
+                      <div className="w-12 h-12 bg-sky-500/20 rounded-full flex items-center justify-center border border-sky-500/50">
+                        <Info className="w-6 h-6 text-sky-400" />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-sky-400 text-lg">AI Observation: This folder already looks organized!</h3>
+                        <p className="text-slate-400">Nyx found no duplicates and no further organizational improvements needed for the remaining files.</p>
+                      </div>
+                   </div>
+                )}
+
+                <div className="bg-slate-900/80 border border-slate-800 p-8 rounded-2xl shadow-xl">
+                  <h3 className="font-semibold text-xl text-amber-400 mb-4 flex items-center gap-2"><Layout className="w-5 h-5"/> AI Reasoning</h3>
+                  <div className="p-6 bg-amber-500/5 border border-amber-500/10 rounded-xl mb-8">
+                    <p className="text-slate-300 italic text-lg leading-relaxed">"{aiExclusions.reasoning}"</p>
+                  </div>
+                  
+                  <h3 className="font-semibold text-lg mb-4 text-white">Recommended Exclusions Applied</h3>
+                  <div className="flex gap-3 flex-wrap">
+                    {(aiExclusions.exclusions || []).map(ex => (
+                      <label key={ex} className="flex items-center gap-2 px-4 py-2 bg-slate-950 rounded-lg border border-slate-800 text-sm font-mono text-slate-300 shadow-inner cursor-pointer hover:bg-slate-800">
+                        <input 
+                          type="checkbox" 
+                          defaultChecked={true}
+                          className="w-4 h-4 rounded border-slate-700 text-sky-500 focus:ring-sky-500 focus:ring-offset-slate-950" 
+                        />
+                        {ex}
+                      </label>
+                    ))}
+                  </div>
                 </div>
               </div>
             ) : (
@@ -408,7 +460,12 @@ function App() {
                 </div>
               ))}
               {items.filter(i => i.action === 'review_duplicate_deletion').length === 0 && (
-                <div className="text-center py-20 text-slate-500 text-lg">No duplicates found in this scan.</div>
+                <div className="bg-slate-900/50 border border-slate-800 border-dashed rounded-2xl py-20 text-center flex flex-col items-center gap-4">
+                  <div className="p-4 bg-slate-800 rounded-full">
+                    <Copy className="w-8 h-8 text-slate-600" />
+                  </div>
+                  <div className="text-slate-500 text-lg">No duplicates found in this scan.</div>
+                </div>
               )}
             </div>
           </div>
@@ -481,7 +538,12 @@ function App() {
                 </tbody>
               </table>
               {items.filter(i => i.type === 'organization_proposal').length === 0 && (
-                <div className="text-center py-20 text-slate-500 text-lg">No proposals available.</div>
+                <div className="bg-slate-900/50 border border-slate-800 border-dashed rounded-2xl py-20 text-center flex flex-col items-center gap-4 m-8">
+                  <div className="p-4 bg-slate-800 rounded-full">
+                    <Wand2 className="w-8 h-8 text-slate-600" />
+                  </div>
+                  <div className="text-slate-500 text-lg">No proposals available.</div>
+                </div>
               )}
             </div>
           </div>

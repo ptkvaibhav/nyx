@@ -34,6 +34,8 @@ console.log(`Quality check passed for ${jsFiles.length} JavaScript files and ${j
 
 function normalizeModuleSyntax(code) {
   return code
+    .replace(/^#!.*?\n/, "")
+    .replace(/import\.meta\.url/g, '"file:///dummy"')
     .replace(/^\s*import[\s\S]*?from\s+["'][^"']+["'];?\s*$/gm, "")
     .replace(/^\s*import\s+["'][^"']+["'];?\s*$/gm, "")
     .replace(/\bexport\s+default\b/g, "")
