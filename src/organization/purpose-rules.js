@@ -14,61 +14,61 @@ export const PURPOSE_RULES = [
     purpose: "resume",
     expectedFolders: ["Resumes"],
     renameLabel: "Resume",
-    pattern: /(^|[\s._-])(resume|cv|cover-letter)([\s._-]|$)/i
+    pattern: /(^|[\s._-])(resume|cv|curriculum-vitae|cover-letter)([\s._-]|$)/i
   },
   {
     purpose: "travel-ticket",
     expectedFolders: ["Tickets"],
     renameLabel: "Travel_Ticket",
-    pattern: /(^|[\s._-])(ticket|flight|train|boarding|itinerary|booking|cleartrip)([\s._-]|$)/i
+    pattern: /(^|[\s._-])(ticket|flight|train|irctc|boarding|itinerary|booking|cleartrip|makemytrip)([\s._-]|$)/i
   },
   {
     purpose: "finance",
     expectedFolders: ["Finance"],
     renameLabel: "Finance_Record",
-    pattern: /\b(invoice|receipt|tax|pay[\s._-]?slip|statement|e[\s._-]?statement|transactions?|account[\s._-]?transactions?|account|bank|epfo|nomination|salary|compensation|increment|hike|ctc)\b/i
+    pattern: /(^|[\s._-])(invoice|receipt|tax-?form|pay[\s._-]?slip|salary[\s._-]?slip|epfo-?statement|bank[\s._-]?statement|account[\s._-]?statement|transactions?|nomination-?form|ctc-?letter|increment-?letter)([\s._-]|$)/i
   },
   {
     purpose: "insurance",
     expectedFolders: ["Finance/Insurance"],
     renameLabel: "Insurance_Policy",
-    pattern: /\b(insurance|policy|premium|hdfc[\s._-]?life|lic|max[\s._-]?life|star[\s._-]?health)\b/i
+    pattern: /(^|[\s._-])(insurance-?policy|premium-?receipt|hdfc[\s._-]?life|lic-?policy|max[\s._-]?life|star[\s._-]?health|policy-?document)([\s._-]|$)/i
   },
   {
     purpose: "utility",
     expectedFolders: ["Finance/Utilities"],
     renameLabel: "Utility_Bill",
-    pattern: /\b(electricity|water|gas|broadband|wifi|internet|jio|airtel|bill|recharge)\b/i
+    pattern: /(^|[\s._-])(electricity-?bill|gas-?bill|broadband-?bill|wifi-?bill|jio-?recharge|airtel-?bill|mobile-?bill|utility-?invoice)([\s._-]|$)/i
   },
   {
     purpose: "identity",
     expectedFolders: ["Identity"],
     renameLabel: "Identity_Document",
-    pattern: /(^|[\s._-])(e-?aadhaar|eaadhaar|aadhaar|aadhar|e-?pan|epan|pan|passport|license|voter)([\s._-]|$)/i
+    pattern: /(^|[\s._-])(e-?aadhaar|eaadhaar|aadhaar-?card|aadhar-?card|e-?pan|epan|pan-?card|passport|driving-?license|voter-?id)([\s._-]|$)/i
   },
   {
     purpose: "education",
     expectedFolders: ["Education"],
     renameLabel: "Education_Record",
-    pattern: /(transcript|certificate|marksheet|diploma|degree|coursera|uc-[a-f0-9-]+)/i
+    pattern: /(^|[\s._-])(academic-?transcript|marksheet|degree-?certificate|provisional-?certificate|diploma|graduation|coursera-?certificate|udemy-?certificate)([\s._-]|$)/i
   },
   {
     purpose: "legal",
     expectedFolders: ["Legal"],
     renameLabel: "Legal_Record",
-    pattern: /(^|[\s._-])(contract|agreement|nda|lease|offer|docusign|employment|joining|relieving|experience)([\s._-]|$)/i
+    pattern: /(^|[\s._-])(legal-?agreement|nda|non-?disclosure|lease-?deed|rental-?agreement|offer-?letter|appointment-?letter|relieving-?letter|experience-?certificate)([\s._-]|$)/i
   },
   {
     purpose: "project",
     expectedFolders: ["Projects"],
     renameLabel: "Project_Document",
-    pattern: /(^|[\s._-])(project|plan|roadmap|implementation|proposal|artifact|portfolio)([\s._-]|$)/i
+    pattern: /(^|[\s._-])(project-?plan|roadmap|implementation-?guide|technical-?proposal|design-?artifact|portfolio-?item)([\s._-]|$)/i
   },
   {
     purpose: "installer",
     expectedFolders: ["Installers"],
     renameLabel: "Installer",
-    pattern: /(^|[\s._-])(setup|installer|install|portable|vmware|virtualbox)([\s._-]|$)/i
+    pattern: /(^|[\s._-])(setup|installer|install|portable-?app|vmware-?app|virtualbox-?image|(.+)-setup)([\s._-]|$)/i
   }
 ];
 
@@ -79,7 +79,27 @@ export const CODE_EXTENSIONS = new Set([
   ".js", ".ts", ".jsx", ".tsx", ".py", ".java", ".c", ".cpp", ".h", ".hpp", ".cs", ".go", ".rs", ".rb", ".php", ".html", ".css", ".sql", ".sh", ".bat", ".ps1", ".yml", ".yaml", ".json", ".xml", ".md", ".sol"
 ]);
 
-export function inferPurposeDetails({ absolutePath = "", baseName = "", extension = "", category = "other", extractedText = "" }) {
+export function inferPurposeDetails({ absolutePath = "", baseName = "", extension = "", category = "other", extractedText = "", isEntity = false, entityType = "" }) {
+  // If it's a cohesive entity, categorize it immediately to prevent fragmentation
+  if (isEntity) {
+    if (entityType === "software_project") {
+       return {
+         purpose: "code",
+         expectedFolders: ["Projects"],
+         matchedByRule: true,
+         renameLabel: "Project"
+       };
+    }
+    if (entityType === "application") {
+       return {
+         purpose: "installer",
+         expectedFolders: ["Applications"],
+         matchedByRule: true,
+         renameLabel: "App"
+       };
+    }
+  }
+
   const normalizedBaseName = String(baseName || path.basename(absolutePath)).toLowerCase();
   const normalizedExtension = String(extension || path.extname(absolutePath)).toLowerCase();
   

@@ -18,9 +18,16 @@ export function findIrrelevanceFindings({ duplicates = [], files = [], directori
 function findExtractedArchives({ files, directories }) {
   const findings = [];
   const ARCHIVE_EXTENSIONS = [".zip", ".7z", ".rar", ".tar", ".gz", ".tgz"];
-  const directoryPaths = new Set(directories.map(d => d.absolutePath.toLowerCase()));
+  
+  // Combine regular directories and folders flagged as cohesive entities
+  const allDirPaths = new Set([
+    ...directories.map(d => d.absolutePath.toLowerCase()),
+    ...files.filter(f => f.isEntity).map(f => f.absolutePath.toLowerCase())
+  ]);
 
   for (const file of files) {
+    if (file.isEntity) continue; // Archives aren't usually folder entities themselves in this context
+    
     const baseName = file.baseName || path.basename(file.absolutePath || "");
     if (!baseName) continue;
 
@@ -30,7 +37,7 @@ function findExtractedArchives({ files, directories }) {
     const baseNameWithoutExt = baseName.slice(0, -ext.length);
     const possibleDirPath = path.join(path.dirname(file.absolutePath), baseNameWithoutExt);
 
-    if (directoryPaths.has(possibleDirPath.toLowerCase())) {
+    if (allDirPaths.has(possibleDirPath.toLowerCase())) {
       findings.push({
         id: `irrelevance:extracted_archive:${file.sha256}:${file.relativePath}`,
         type: "irrelevance_finding",

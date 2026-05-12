@@ -2,6 +2,7 @@ export function findDuplicateGroups(fileEntries) {
   const groups = new Map();
 
   for (const fileEntry of fileEntries) {
+    if (fileEntry.isEntity) continue;
     const existingGroup = groups.get(fileEntry.sha256) ?? [];
     existingGroup.push(fileEntry);
     groups.set(fileEntry.sha256, existingGroup);

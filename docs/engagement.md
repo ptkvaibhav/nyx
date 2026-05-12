@@ -18,6 +18,27 @@ User notes:
 - Focus on personal documents and identity files.
 - Exclude large toolsets and VM images to keep scanning performance high.
 
+## AI Reasoning & Intelligence Measures
+
+Nyx uses a combination of deterministic heuristics and local AI (Ollama) to ensure a consistent, safe organization.
+
+### 1. Cohesive Entity Detection
+Nyx identifies folders that belong to a single software project or application. These folders are treated as **Cohesive Entities** and will never be fragmented:
+- **Markers:** `.git`, `node_modules`, `package.json`, `Release/bin`, etc.
+- **Action:** The entire folder is moved or kept as a unit. Nyx will never move individual `.js` or `.pdf` files out of a detected application directory.
+
+### 2. Deterministic Taxonomy
+Files are categorized based on strict priority rules:
+- **Finance:** Tax forms, pay slips, bank statements.
+- **Identity:** Aadhaar, PAN, Passport, Licenses.
+- **Education:** Marksheets, degrees, transcripts.
+- **Legal:** Agreements, NDAs, offer letters.
+
+### 3. Structural Integrity
+- **Recursive Pruning:** After any move, Nyx recursively removes parent directories that have become empty, ensuring no "ghost folders" are left behind.
+- **Hash-First Deduplication:** Duplicates are identified exclusively by content fingerprint (SHA-256).
+- **Rollback Safety:** Every operation is recorded in a rollback-ready audit log.
+
 ## Safe Irrelevance File Rules
 
 Nyx should begin with a conservative review-only rule set. Nothing in this list may be deleted without showing proof and receiving user confirmation.
