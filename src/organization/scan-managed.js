@@ -1,5 +1,6 @@
 import { readdir, stat } from "node:fs/promises";
 import path from "node:path";
+import { detectCohesiveEntity } from "../core/entity-detector.js";
 
 export async function scanManagedDirectories({ managedDirectories, exclusions = [] }) {
   const normalizedExclusions = exclusions.map((entry) => normalizeSegment(entry));
@@ -58,6 +59,22 @@ async function walkDirectory({ rootPath, currentPath, exclusions, files, directo
     }
 
     if (entry.isDirectory()) {
+      // COHESIVE ENTITY CHECK:
+      // If this is an app or project folder, we stop descending and treat the folder itself as the entity.
+      const entityResult = await detectCohesiveEntity(absolutePath);
+      if (entityResult.isEntity) {
+        files.push({
+          rootPath,
+          absolutePath,
+          relativePath,
+          modifiedAt: new Date().toISOString(), // Use folder stats or now
+          sizeBytes: 0, // Folders don't have a simple size
+          isEntity: true,
+          entityType: entityResult.type
+        });
+        continue;
+      }
+
       directories.push({
         rootPath,
         absolutePath,
@@ -80,7 +97,8 @@ async function walkDirectory({ rootPath, currentPath, exclusions, files, directo
         absolutePath,
         relativePath,
         modifiedAt: stats.mtime.toISOString(),
-        sizeBytes: stats.size
+        sizeBytes: stats.size,
+        isEntity: false
       });
     }
   }

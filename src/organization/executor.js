@@ -1,5 +1,5 @@
 import { constants } from "node:fs";
-import { access, appendFile, mkdir, rename, unlink } from "node:fs/promises";
+import { access, appendFile, mkdir, rename, unlink, readdir, rmdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { fingerprintFile } from "../core/fingerprint.js";
 import { loadEngagement } from "../engagement/parser.js";
@@ -28,8 +28,13 @@ export async function applyApprovedReview({
     errors: []
   };
 
+  const sourceDirsToPrune = new Set();
+
   for (const item of approvedItems) {
     try {
+      const sourcePath = path.resolve(item.subjectPath);
+      sourceDirsToPrune.add(path.dirname(sourcePath));
+
       const appliedItem = await applyReviewItem({ item, managedRoots, pathRedirects });
       result.applied.push(appliedItem);
       
@@ -48,6 +53,11 @@ export async function applyApprovedReview({
         message: error.message
       });
     }
+  }
+
+  // PRUNE EMPTY DIRECTORIES
+  if (sourceDirsToPrune.size > 0) {
+    await pruneEmptyDirectories(Array.from(sourceDirsToPrune), managedRoots);
   }
 
   const remainingItems = catalog.getPendingReviewItems();
@@ -192,26 +202,34 @@ async function applyPathMutation({ item, managedRoots, pathRedirects }) {
 
   assertInsideManagedRoots(sourcePath, managedRoots);
   assertInsideManagedRoots(targetPath, managedRoots);
-  await assertFingerprint(sourcePath, item.evidence?.sha256);
+
+  const stats = await stat(sourcePath);
+  const isDirectory = stats.isDirectory();
+
+  if (!isDirectory) {
+    await assertFingerprint(sourcePath, item.evidence?.sha256);
+  }
 
   // Collision Resolution
   if (await exists(targetPath)) {
-    // If it's the exact same file (same hash), we can skip moving and just treat it as applied
-    const targetFingerprint = await fingerprintFile(targetPath);
-    if (targetFingerprint.sha256 === item.evidence?.sha256) {
-      return {
-        itemId: item.id,
-        action: item.action,
-        appliedAt: new Date().toISOString(),
-        previousPath: sourcePath,
-        newPath: targetPath,
-        status: "already_exists_identical"
-      };
+    if (!isDirectory) {
+      // If it's the exact same file (same hash), we can skip moving and just treat it as applied
+      const targetFingerprint = await fingerprintFile(targetPath);
+      if (targetFingerprint.sha256 === item.evidence?.sha256) {
+        return {
+          itemId: item.id,
+          action: item.action,
+          appliedAt: new Date().toISOString(),
+          previousPath: sourcePath,
+          newPath: targetPath,
+          status: "already_exists_identical"
+        };
+      }
     }
 
     // Otherwise, generate a unique path by appending a short hash
-    const ext = path.extname(targetPath);
-    const base = targetPath.slice(0, -ext.length);
+    const ext = isDirectory ? "" : path.extname(targetPath);
+    const base = isDirectory ? targetPath : targetPath.slice(0, -ext.length);
     const shortHash = String(item.evidence?.sha256 ?? Date.now()).slice(0, 8);
     targetPath = `${base}_${shortHash}${ext}`;
     
@@ -237,6 +255,40 @@ async function applyPathMutation({ item, managedRoots, pathRedirects }) {
       to: sourcePath
     }
   };
+}
+
+/**
+ * Recursively removes empty directories, starting from provided paths 
+ * and moving up until a managed root or a non-empty directory is hit.
+ */
+async function pruneEmptyDirectories(paths, managedRoots) {
+  for (const startPath of paths) {
+    let current = startPath;
+    
+    while (current) {
+      // Don't prune the root itself
+      if (managedRoots.some(root => path.relative(root, current) === "")) break;
+      
+      // Safety check: ensure we are inside a managed root
+      try {
+        assertInsideManagedRoots(current, managedRoots);
+      } catch {
+        break; 
+      }
+
+      try {
+        const entries = await readdir(current);
+        if (entries.length === 0) {
+          await rmdir(current);
+          current = path.dirname(current);
+        } else {
+          break; // Stop if not empty
+        }
+      } catch {
+        break; // Stop on error
+      }
+    }
+  }
 }
 
 async function applyDuplicateDeletion({ item, managedRoots }) {

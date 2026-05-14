@@ -123,17 +123,19 @@ export async function startServer({ port = 3030, dbPath = DEFAULT_DB_PATH } = {}
   // Step 3: AI Exclusions
   app.post("/api/ai/exclusions", async (req, res) => {
     try {
-      const prompt = `Based on typical file organization, what directories should be in the exclusion list? Give me ONLY a raw JSON string like {"exclusions": ["folder1"], "reasoning": "why"}. No markdown, no intro.`;
-      const aiResponse = await askAI(prompt);
+      const prompt = `Based on typical file organization, what directories should be in the exclusion list?
+Consider that Nyx now treats "Cohesive Entities" (Git repos, apps, installers) as units.
+Give me ONLY a raw JSON string like {"exclusions": ["folder1"], "reasoning": "why"}. No markdown, no intro.`;
+      const aiResponse = await askAI(prompt, "You are a deterministic file organization AI. Follow strict technical heuristics. Proactively exclude massive technical toolsets like node_modules, .git, and build artifacts.");
       const clean = cleanJSON(aiResponse);
       const parsed = JSON.parse(clean);
       if (!Array.isArray(parsed.exclusions)) {
-         parsed.exclusions = ["node_modules", ".git", "Temp"];
-         parsed.reasoning = "AI generated malformed list. Defaulting to standard exclusions.";
+         parsed.exclusions = [".git", "node_modules", "Temp", "dist", "build"];
+         parsed.reasoning = "AI generated malformed list. Defaulting to standard technical exclusions.";
       }
       res.json(parsed);
     } catch (error) {
-      res.status(500).json({ error: error.message, exclusions: ["node_modules", ".git", "Temp"], reasoning: "Failed to parse AI response. Using defaults." });
+      res.status(500).json({ error: error.message, exclusions: [".git", "node_modules", "Temp"], reasoning: "Failed to parse AI response. Using defaults." });
     }
   });
 
@@ -141,8 +143,11 @@ export async function startServer({ port = 3030, dbPath = DEFAULT_DB_PATH } = {}
   app.post("/api/ai/rename", async (req, res) => {
     try {
       const { fileInfo } = req.body;
-      const prompt = `I have a file with info ${JSON.stringify(fileInfo)}. Propose a rename and give reasoning. Return ONLY a raw JSON string like {"proposedName": "file.pdf", "reasoning": "why"}. No markdown.`;
-      const aiResponse = await askAI(prompt);
+      const prompt = `I have a file with info ${JSON.stringify(fileInfo)}. Propose a rename and give reasoning.
+Ensure names are deterministic (e.g., lowercase, underscores).
+If it's a Finance/Form_16, ensure the year is prominent.
+Return ONLY a raw JSON string like {"proposedName": "file.pdf", "reasoning": "why"}. No markdown.`;
+      const aiResponse = await askAI(prompt, "You are a highly deterministic file renaming assistant. You must follow standard naming conventions and prioritize semantic clarity based on file content and metadata.");
       const clean = cleanJSON(aiResponse);
       res.json(JSON.parse(clean));
     } catch (error) {
