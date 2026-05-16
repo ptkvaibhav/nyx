@@ -32,7 +32,7 @@ function App() {
   const [pdfPassword, setPdfPassword] = useState("");
   const [passwordError, setPasswordError] = useState("");
   const [skippedPasswordFiles, setSkippedPasswordFiles] = useState<string[]>([]);
-  const [scanProgress, setScanProgress] = useState({ current: 0, total: 0, file: "" });
+  const [scanProgress, setScanProgress] = useState({ current: 0, total: 0, file: "", status: "idle", error: "" });
   
   const [stats, setStats] = useState<Stats | null>(null);
   const [items, setItems] = useState<ReviewItem[]>([]);
@@ -65,6 +65,26 @@ function App() {
           const res = await fetch('/api/scan/progress');
           const data = await res.json();
           setScanProgress(data);
+          
+          if (data.status === "complete") {
+             setScanning(false);
+             await fetchData();
+             // Fetch AI exclusions
+             const exRes = await fetch('/api/ai/exclusions', { method: 'POST' });
+             if (exRes.ok) {
+               setAiExclusions(await exRes.json());
+             }
+             setStep(3);
+          } else if (data.status === "needs_password") {
+             setScanning(false);
+             setNeedsPassword(true);
+             setPasswordFile(data.passwordFile || "Unknown File");
+             setPasswordError("");
+          } else if (data.status === "failed") {
+             setScanning(false);
+             alert(`Scan failed: ${data.error}`);
+             setStep(1);
+          }
         } catch {
           // ignore
         }
@@ -75,6 +95,7 @@ function App() {
 
   useEffect(() => {
     if (step > 1) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       fetchData().catch(console.error);
     }
   }, [step]);
@@ -82,15 +103,6 @@ function App() {
   const onFolderSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files.length > 0) {
-      // In modern browsers, we can get the relative path. 
-      // For a local tool, we try to reconstruct the path or ask the user to confirm.
-      // Since we are running on localhost, we can use a trick or just let the user know.
-      const firstFile = files[0];
-      // file.webkitRelativePath gives "folderName/sub/file.txt"
-      // We can't get the absolute path "C:/..." from a browser due to security.
-      // We'll use a better backend bridge if this isn't enough, but for "web upload feel", this is it.
-      console.log("Selected folder root:", firstFile.webkitRelativePath.split('/')[0]);
-      // For this specific tool, we'll try to trigger the backend picker via the button instead.
       triggerBackendPicker();
     }
   };
@@ -109,37 +121,17 @@ function App() {
 
   const startScan = async (currentSkipped = skippedPasswordFiles) => {
     setScanning(true);
-    setScanProgress({ current: 0, total: 0, file: "" });
+    setScanProgress({ current: 0, total: 0, file: "", status: "running", error: "" });
     setStep(2);
     try {
-      const res = await fetch('/api/scan/start', {
+      await fetch('/api/scan/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ directory, skippedFiles: currentSkipped })
       });
-      const data = await res.json();
-      
-      if (data.needsPassword) {
-         setNeedsPassword(true);
-         setPasswordError("");
-         setPasswordFile(data.passwordFile || "Unknown File");
-         setScanning(false);
-         return;
-      }
-      
-      await fetchData();
-      
-      // Fetch AI exclusions
-      const exRes = await fetch('/api/ai/exclusions', { method: 'POST' });
-      if (exRes.ok) {
-        setAiExclusions(await exRes.json());
-      }
-      
-      setStep(3);
     } catch {
-      alert('Scan failed');
+      alert('Scan initiation failed');
       setStep(1);
-    } finally {
       setScanning(false);
     }
   };
@@ -163,8 +155,8 @@ function App() {
       setPasswordError("");
       setPdfPassword("");
       startScan();
-    } catch (e) {
-      console.error(e);
+    } catch {
+      console.error("Server error verifying password");
       setPasswordError("Server error verifying password");
     }
   };

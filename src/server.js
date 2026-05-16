@@ -18,10 +18,50 @@ export async function startServer({ port = 3030, dbPath = DEFAULT_DB_PATH } = {}
 
   // API Routes
   
-  let currentScanProgress = { current: 0, total: 0, file: "" };
+  let currentScanProgress = { current: 0, total: 0, file: "", status: "idle" };
+  let scanAbortController = null;
 
   app.get("/api/scan/progress", (req, res) => {
     res.json(currentScanProgress);
+  });
+
+  app.post("/api/scan/start", async (req, res) => {
+    const { directory, skippedFiles } = req.body;
+    if (!directory) return res.status(400).json({ error: "Directory path required" });
+
+    // Prevent multiple concurrent scans for now
+    if (currentScanProgress.status === "running") {
+      return res.status(409).json({ error: "A scan is already in progress" });
+    }
+
+    currentScanProgress = { current: 0, total: 0, file: "", status: "running" };
+
+    // Fire and forget the scan job
+    (async () => {
+      try {
+        const audit = await buildLocalAudit({ 
+          dbPath,
+          targetDirectory: directory,
+          skippedFiles: skippedFiles || [],
+          onProgress: (current, total, file) => {
+             currentScanProgress = { current, total, file, status: "running" };
+          }
+        });
+
+        if (audit.needsPassword) {
+          currentScanProgress.status = "needs_password";
+          currentScanProgress.passwordFile = audit.passwordFile;
+        } else {
+          currentScanProgress.status = "complete";
+        }
+      } catch (error) {
+        console.error("Background Scan Error:", error);
+        currentScanProgress.status = "failed";
+        currentScanProgress.error = error.message;
+      }
+    })();
+
+    res.json({ success: true, message: "Scan started in background" });
   });
 
   app.get("/api/select-directory", async (req, res) => {
@@ -39,74 +79,6 @@ export async function startServer({ port = 3030, dbPath = DEFAULT_DB_PATH } = {}
       res.json({ directory: result });
     } catch (e) {
       res.status(500).json({ error: e.message });
-    }
-  });
-
-  app.post("/api/add-password", async (req, res) => {
-    try {
-      const { password, filePath } = req.body;
-      
-      // Test the password immediately if filePath is provided
-      if (filePath) {
-        const fs = await import("node:fs/promises");
-        const pdf = (await import("pdf-parse")).default;
-        const dataBuffer = await fs.readFile(filePath);
-        
-        let isValid = false;
-        
-        const originalWarn = console.warn;
-        console.warn = () => {};
-        try {
-          await pdf(dataBuffer, { password });
-          isValid = true;
-        } catch (e) {
-          isValid = false;
-        } finally {
-          console.warn = originalWarn;
-        }
-        
-        if (!isValid) {
-          return res.json({ success: false, error: "Incorrect password for this file" });
-        }
-      }
-
-      const { loadConfig, saveConfig } = await import("./core/config.js");
-      const { config, configPath } = await loadConfig();
-      if (!config.pdfPasswords) config.pdfPasswords = [];
-      if (!config.pdfPasswords.includes(password)) {
-        config.pdfPasswords.push(password);
-        await saveConfig(config, configPath);
-      }
-      res.json({ success: true });
-    } catch (e) {
-      res.status(500).json({ error: e.message });
-    }
-  });
-
-  // Step 1 & 2: Start Scan
-  app.post("/api/scan/start", async (req, res) => {
-    try {
-      const { directory, skippedFiles } = req.body;
-      if (!directory) return res.status(400).json({ error: "Directory path required" });
-      
-      currentScanProgress = { current: 0, total: 0, file: "" };
-      const audit = await buildLocalAudit({ 
-        dbPath,
-        targetDirectory: directory,
-        skippedFiles: skippedFiles || [],
-        onProgress: (current, total, file) => {
-           currentScanProgress = { current, total, file };
-        }
-      });
-      
-      if (audit.needsPassword) {
-        res.json({ success: true, message: "Password required", needsPassword: true, passwordFile: audit.passwordFile });
-        return;
-      }
-      
-      res.json({ success: true, message: "Scan complete", needsPassword: false });
-    } catch (error) {
-      res.status(500).json({ error: error.message });
     }
   });
 
