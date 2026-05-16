@@ -57,14 +57,30 @@ export async function buildLocalAudit({
       continue;
     }
 
-    const profile = await fingerprintFile(scannedFile.absolutePath);
-    
-    // Extract content for deep intelligence (PDFs, txt, etc.)
-    if (skippedFiles.includes(scannedFile.absolutePath)) {
-      profile.extractedText = "";
+    let profile;
+    if (scannedFile.isEntity) {
+      // For folders (entities), we don't read bytes. 
+      // We use a deterministic hash based on path and type.
+      profile = {
+        absolutePath: scannedFile.absolutePath,
+        baseName: path.basename(scannedFile.absolutePath),
+        extension: "",
+        sizeBytes: 0,
+        modifiedAt: scannedFile.modifiedAt,
+        sha256: `entity:${scannedFile.entityType}:${scannedFile.absolutePath}`,
+        extractedText: ""
+      };
     } else {
-      profile.extractedText = await extractContent(scannedFile.absolutePath);
+      profile = await fingerprintFile(scannedFile.absolutePath);
+      
+      // Extract content for deep intelligence (PDFs, txt, etc.)
+      if (skippedFiles.includes(scannedFile.absolutePath)) {
+        profile.extractedText = "";
+      } else {
+        profile.extractedText = await extractContent(scannedFile.absolutePath);
+      }
     }
+
     const passwordRequired = profile.extractedText === "[[PASSWORD_REQUIRED]]";
     
     if (passwordRequired) {
