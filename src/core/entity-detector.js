@@ -22,7 +22,10 @@ const APPLICATION_NAME_PATTERNS = [
   /DS4Windows/i,
   /DVWA/i,
   /VMware/i,
-  /Ollama/i
+  /Ollama/i,
+  /^\.thumbnails$/i,
+  /^\.cache$/i,
+  /^Android$/i
 ];
 
 /**

@@ -175,7 +175,14 @@ function App() {
     fetchData();
   };
 
+  const rejectItem = async (id: string) => {
+    await fetch(`/api/items/${encodeURIComponent(id)}/reject`, { method: 'POST' });
+    fetchData();
+  };
+
   const getAiReasoning = async (item: ReviewItem) => {
+    if (aiReasoning[item.id]) return; // Use cache
+
     try {
       setAiReasoning(prev => ({ ...prev, [item.id]: 'Thinking...' }));
       const res = await fetch('/api/ai/rename', {
@@ -517,13 +524,21 @@ function App() {
                           )}
                         </div>
                       </td>
-                      <td className="px-6 py-5 text-right align-top w-48">
-                         <button 
-                            onClick={() => approveItem(item.id)}
-                            className={`px-5 py-2 rounded-lg text-sm font-bold transition-all w-full ${item.status === 'approved' ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700 hover:text-white'}`}
-                          >
-                            {item.status === 'approved' ? '✓ Approved' : 'Approve'}
-                          </button>
+                      <td className="px-6 py-5 text-right align-top w-56">
+                         <div className="flex flex-col gap-2">
+                           <button 
+                              onClick={() => approveItem(item.id)}
+                              className={`px-5 py-2 rounded-lg text-sm font-bold transition-all w-full ${item.status === 'approved' ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700 hover:text-white'}`}
+                            >
+                              {item.status === 'approved' ? '✓ Approved' : 'Approve'}
+                            </button>
+                            <button 
+                              onClick={() => rejectItem(item.id)}
+                              className="px-5 py-2 rounded-lg text-sm font-bold transition-all w-full bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-500/20"
+                            >
+                              Reject
+                            </button>
+                         </div>
                       </td>
                     </tr>
                   ))}

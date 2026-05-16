@@ -170,6 +170,17 @@ Return ONLY a raw JSON string like {"proposedName": "file.pdf", "reasoning": "wh
     }
   });
 
+  app.post("/api/items/:id/reject", async (req, res) => {
+    try {
+      const { id } = req.params;
+      catalog.db.prepare("UPDATE review_items SET status = 'rejected', approved = 0, updated_at = ? WHERE id = ?")
+        .run(new Date().toISOString(), id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   app.post("/api/apply", async (req, res) => {
     try {
       const result = await applyApprovedReview({ catalog });
