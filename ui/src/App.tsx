@@ -1,6 +1,6 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 import { useState, useEffect, useRef } from 'react';
-import { Layout, Copy, Wand2, CheckCircle, ArrowRight, RefreshCw, FolderSearch, Cloud, Sparkles, KeyRound, Trash2, FolderOpen, Info } from 'lucide-react';
+import { Layout, Copy, Wand2, CheckCircle, ArrowRight, RefreshCw, FolderSearch, Cloud, Sparkles, KeyRound, Trash2, Info, FileMinus, FilePlus, FolderOpen } from 'lucide-react';
 
 interface Stats {
   totalFiles: number;
@@ -505,9 +505,15 @@ function App() {
                         </span>
                       </td>
                       <td className="px-6 py-5">
-                        <div className="text-xs font-mono text-slate-500 mb-2 truncate" title={item.subjectPath}>{item.subjectPath}</div>
-                        <div className="text-base text-sky-400 font-semibold mb-4" title={item.proposedPath}>
-                          ➜ {item.proposedPath || item.evidence?.proposedName}
+                        <div className="flex flex-col gap-3 mb-4">
+                          <div className="flex items-center gap-3 text-slate-500 line-through decoration-rose-500/50">
+                            <div className="p-2 bg-slate-950 rounded border border-slate-800"><FileMinus className="w-4 h-4 text-rose-400"/></div>
+                            <span className="text-xs font-mono truncate" title={item.subjectPath}>{item.subjectPath}</span>
+                          </div>
+                          <div className="flex items-center gap-3 bg-sky-500/10 p-3 rounded-xl border border-sky-500/20">
+                            <div className="p-2 bg-sky-500/20 rounded"><FilePlus className="w-4 h-4 text-sky-400"/></div>
+                            <span className="text-sm font-bold text-sky-400 break-all" title={item.proposedPath || item.evidence?.proposedName}>{item.proposedPath || item.evidence?.proposedName}</span>
+                          </div>
                         </div>
                         
                         {/* AI Reasoning Section */}
