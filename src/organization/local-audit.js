@@ -1,6 +1,7 @@
 import { Catalog } from "../core/catalog.js";
 import { fingerprintFile } from "../core/fingerprint.js";
 import { loadEngagement } from "../engagement/parser.js";
+import path from "node:path";
 import { findDuplicateGroups } from "./duplicates.js";
 import { findIrrelevanceFindings } from "./irrelevance.js";
 import { buildOrganizationProposals } from "./proposals.js";
