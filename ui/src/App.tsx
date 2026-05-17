@@ -1,6 +1,6 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 import { useState, useEffect, useRef } from 'react';
-import { Layout, Copy, Wand2, CheckCircle, ArrowRight, RefreshCw, FolderSearch, Cloud, Sparkles, KeyRound, Trash2, FolderOpen, Info } from 'lucide-react';
+import { Layout, Copy, Wand2, CheckCircle, ArrowRight, RefreshCw, FolderSearch, Cloud, Sparkles, KeyRound, Trash2, Info, FileMinus, FilePlus, FolderOpen } from 'lucide-react';
 
 interface Stats {
   totalFiles: number;
@@ -32,7 +32,7 @@ function App() {
   const [pdfPassword, setPdfPassword] = useState("");
   const [passwordError, setPasswordError] = useState("");
   const [skippedPasswordFiles, setSkippedPasswordFiles] = useState<string[]>([]);
-  const [scanProgress, setScanProgress] = useState({ current: 0, total: 0, file: "" });
+  const [scanProgress, setScanProgress] = useState({ current: 0, total: 0, file: "", status: "idle", error: "" });
   
   const [stats, setStats] = useState<Stats | null>(null);
   const [items, setItems] = useState<ReviewItem[]>([]);
@@ -65,6 +65,26 @@ function App() {
           const res = await fetch('/api/scan/progress');
           const data = await res.json();
           setScanProgress(data);
+          
+          if (data.status === "complete") {
+             setScanning(false);
+             await fetchData();
+             // Fetch AI exclusions
+             const exRes = await fetch('/api/ai/exclusions', { method: 'POST' });
+             if (exRes.ok) {
+               setAiExclusions(await exRes.json());
+             }
+             setStep(3);
+          } else if (data.status === "needs_password") {
+             setScanning(false);
+             setNeedsPassword(true);
+             setPasswordFile(data.passwordFile || "Unknown File");
+             setPasswordError("");
+          } else if (data.status === "failed") {
+             setScanning(false);
+             alert(`Scan failed: ${data.error}`);
+             setStep(1);
+          }
         } catch {
           // ignore
         }
@@ -75,6 +95,7 @@ function App() {
 
   useEffect(() => {
     if (step > 1) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       fetchData().catch(console.error);
     }
   }, [step]);
@@ -82,15 +103,6 @@ function App() {
   const onFolderSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files.length > 0) {
-      // In modern browsers, we can get the relative path. 
-      // For a local tool, we try to reconstruct the path or ask the user to confirm.
-      // Since we are running on localhost, we can use a trick or just let the user know.
-      const firstFile = files[0];
-      // file.webkitRelativePath gives "folderName/sub/file.txt"
-      // We can't get the absolute path "C:/..." from a browser due to security.
-      // We'll use a better backend bridge if this isn't enough, but for "web upload feel", this is it.
-      console.log("Selected folder root:", firstFile.webkitRelativePath.split('/')[0]);
-      // For this specific tool, we'll try to trigger the backend picker via the button instead.
       triggerBackendPicker();
     }
   };
@@ -109,37 +121,17 @@ function App() {
 
   const startScan = async (currentSkipped = skippedPasswordFiles) => {
     setScanning(true);
-    setScanProgress({ current: 0, total: 0, file: "" });
+    setScanProgress({ current: 0, total: 0, file: "", status: "running", error: "" });
     setStep(2);
     try {
-      const res = await fetch('/api/scan/start', {
+      await fetch('/api/scan/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ directory, skippedFiles: currentSkipped })
       });
-      const data = await res.json();
-      
-      if (data.needsPassword) {
-         setNeedsPassword(true);
-         setPasswordError("");
-         setPasswordFile(data.passwordFile || "Unknown File");
-         setScanning(false);
-         return;
-      }
-      
-      await fetchData();
-      
-      // Fetch AI exclusions
-      const exRes = await fetch('/api/ai/exclusions', { method: 'POST' });
-      if (exRes.ok) {
-        setAiExclusions(await exRes.json());
-      }
-      
-      setStep(3);
     } catch {
-      alert('Scan failed');
+      alert('Scan initiation failed');
       setStep(1);
-    } finally {
       setScanning(false);
     }
   };
@@ -163,8 +155,8 @@ function App() {
       setPasswordError("");
       setPdfPassword("");
       startScan();
-    } catch (e) {
-      console.error(e);
+    } catch {
+      console.error("Server error verifying password");
       setPasswordError("Server error verifying password");
     }
   };
@@ -183,7 +175,14 @@ function App() {
     fetchData();
   };
 
+  const rejectItem = async (id: string) => {
+    await fetch(`/api/items/${encodeURIComponent(id)}/reject`, { method: 'POST' });
+    fetchData();
+  };
+
   const getAiReasoning = async (item: ReviewItem) => {
+    if (aiReasoning[item.id]) return; // Use cache
+
     try {
       setAiReasoning(prev => ({ ...prev, [item.id]: 'Thinking...' }));
       const res = await fetch('/api/ai/rename', {
@@ -506,9 +505,15 @@ function App() {
                         </span>
                       </td>
                       <td className="px-6 py-5">
-                        <div className="text-xs font-mono text-slate-500 mb-2 truncate" title={item.subjectPath}>{item.subjectPath}</div>
-                        <div className="text-base text-sky-400 font-semibold mb-4" title={item.proposedPath}>
-                          ➜ {item.proposedPath || item.evidence?.proposedName}
+                        <div className="flex flex-col gap-3 mb-4">
+                          <div className="flex items-center gap-3 text-slate-500 line-through decoration-rose-500/50">
+                            <div className="p-2 bg-slate-950 rounded border border-slate-800"><FileMinus className="w-4 h-4 text-rose-400"/></div>
+                            <span className="text-xs font-mono truncate" title={item.subjectPath}>{item.subjectPath}</span>
+                          </div>
+                          <div className="flex items-center gap-3 bg-sky-500/10 p-3 rounded-xl border border-sky-500/20">
+                            <div className="p-2 bg-sky-500/20 rounded"><FilePlus className="w-4 h-4 text-sky-400"/></div>
+                            <span className="text-sm font-bold text-sky-400 break-all" title={item.proposedPath || item.evidence?.proposedName}>{item.proposedPath || item.evidence?.proposedName}</span>
+                          </div>
                         </div>
                         
                         {/* AI Reasoning Section */}
@@ -525,13 +530,21 @@ function App() {
                           )}
                         </div>
                       </td>
-                      <td className="px-6 py-5 text-right align-top w-48">
-                         <button 
-                            onClick={() => approveItem(item.id)}
-                            className={`px-5 py-2 rounded-lg text-sm font-bold transition-all w-full ${item.status === 'approved' ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700 hover:text-white'}`}
-                          >
-                            {item.status === 'approved' ? '✓ Approved' : 'Approve'}
-                          </button>
+                      <td className="px-6 py-5 text-right align-top w-56">
+                         <div className="flex flex-col gap-2">
+                           <button 
+                              onClick={() => approveItem(item.id)}
+                              className={`px-5 py-2 rounded-lg text-sm font-bold transition-all w-full ${item.status === 'approved' ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700 hover:text-white'}`}
+                            >
+                              {item.status === 'approved' ? '✓ Approved' : 'Approve'}
+                            </button>
+                            <button 
+                              onClick={() => rejectItem(item.id)}
+                              className="px-5 py-2 rounded-lg text-sm font-bold transition-all w-full bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-500/20"
+                            >
+                              Reject
+                            </button>
+                         </div>
                       </td>
                     </tr>
                   ))}

@@ -72,8 +72,8 @@ export const PURPOSE_RULES = [
   }
 ];
 
-// Supports: _v1, -v1, .v1, (1), - Copy, - Copy (1)
-export const VERSION_PATTERN = /([._-]v(\d+))|(\((\d+)\))|([- ]Copy( \((\d+)\))?)$/i;
+// Supports: _v1, -v1, .v1, (1), - Copy, - Copy (1), 2024.4, 1.2.3
+export const VERSION_PATTERN = /([._-]v?(\d+([._]\d+)*))|(\((\d+)\))|([- ]Copy( \((\d+)\))?)$/i;
 
 export const CODE_EXTENSIONS = new Set([
   ".js", ".ts", ".jsx", ".tsx", ".py", ".java", ".c", ".cpp", ".h", ".hpp", ".cs", ".go", ".rs", ".rb", ".php", ".html", ".css", ".sql", ".sh", ".bat", ".ps1", ".yml", ".yaml", ".json", ".xml", ".md", ".sol"
