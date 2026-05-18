@@ -1,6 +1,6 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 import { useState, useEffect, useRef } from 'react';
-import { Layout, Copy, Wand2, CheckCircle, ArrowRight, RefreshCw, FolderSearch, Cloud, Sparkles, KeyRound, Trash2, Info, FileMinus, FilePlus, FolderOpen } from 'lucide-react';
+import { Layout, Copy, Wand2, CheckCircle, ArrowRight, RefreshCw, FolderSearch, Cloud, Sparkles, KeyRound, Trash2, Info, FileMinus, FilePlus, FolderOpen, Eye, Edit2, Check, X } from 'lucide-react';
 
 interface Stats {
   totalFiles: number;
@@ -38,6 +38,8 @@ function App() {
   const [items, setItems] = useState<ReviewItem[]>([]);
   const [applying, setApplying] = useState(false);
   const [proposalFilter, setProposalFilter] = useState<'all' | 'move' | 'rename'>('all');
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState<string>("");
 
   const [aiExclusions, setAiExclusions] = useState<{ exclusions: string[], reasoning: string } | null>(null);
   const [aiReasoning, setAiReasoning] = useState<Record<string, string>>({});
@@ -183,6 +185,30 @@ function App() {
   const rejectItem = async (id: string) => {
     await fetch(`/api/items/${encodeURIComponent(id)}/reject`, { method: 'POST' });
     fetchData();
+  };
+
+  const handleSaveEdit = async (id: string) => {
+    if (!editingName.trim()) return;
+    
+    // Optimistically update the UI
+    setItems(prev => prev.map(i => {
+      if (i.id === id) {
+        return {
+          ...i,
+          proposedPath: i.proposedPath?.replace(/[^\\/]+$/, editingName),
+          evidence: { ...i.evidence, proposedName: editingName }
+        };
+      }
+      return i;
+    }));
+    
+    setEditingItemId(null);
+    setEditingName("");
+  };
+
+  const handleCancelEdit = () => {
+    setEditingItemId(null);
+    setEditingName("");
   };
 
   const getAiReasoning = async (item: ReviewItem) => {
@@ -467,6 +493,9 @@ function App() {
                       <div className="flex items-center gap-3">
                         <Copy className="w-4 h-4 text-slate-500" />
                         <span className="text-sm font-mono text-slate-400">SHA256: {item.evidence.sha256.slice(0, 16)}...</span>
+                        <a href={`/api/file?path=${encodeURIComponent(item.subjectPath)}`} target="_blank" rel="noreferrer" className="text-sky-400 hover:text-sky-300 transition-colors ml-2" title="View File">
+                          <Eye className="w-4 h-4" />
+                        </a>
                       </div>
                       <div className="flex gap-2">
                         <button 
@@ -558,10 +587,44 @@ function App() {
                           <div className="flex items-center gap-3 text-slate-500 line-through decoration-rose-500/50 overflow-hidden">
                             <div className="p-2 bg-slate-950 rounded border border-slate-800 shrink-0"><FileMinus className="w-4 h-4 text-rose-400"/></div>
                             <span className="text-xs font-mono truncate w-full" title={item.subjectPath}>{item.subjectPath}</span>
+                            <a href={`/api/file?path=${encodeURIComponent(item.subjectPath)}`} target="_blank" rel="noreferrer" className="text-sky-400 hover:text-sky-300 transition-colors ml-auto shrink-0" title="View File">
+                              <Eye className="w-4 h-4" />
+                            </a>
                           </div>
-                          <div className="flex items-center gap-3 bg-sky-500/10 p-3 rounded-xl border border-sky-500/20 overflow-hidden">
+                          
+                          <div className="flex items-center gap-3 bg-sky-500/10 p-3 rounded-xl border border-sky-500/20 overflow-hidden group">
                             <div className="p-2 bg-sky-500/20 rounded shrink-0"><FilePlus className="w-4 h-4 text-sky-400"/></div>
-                            <span className="text-sm font-bold text-sky-400 truncate w-full" title={item.proposedPath || item.evidence?.proposedName}>{item.proposedPath || item.evidence?.proposedName}</span>
+                            
+                            {editingItemId === item.id ? (
+                              <div className="flex items-center gap-2 w-full">
+                                <input 
+                                  type="text" 
+                                  value={editingName} 
+                                  onChange={e => setEditingName(e.target.value)}
+                                  className="flex-1 bg-slate-950 border border-sky-500 rounded px-2 py-1 text-sm font-bold text-sky-400 focus:outline-none"
+                                  autoFocus
+                                  onKeyDown={e => e.key === 'Enter' && handleSaveEdit(item.id)}
+                                />
+                                <button onClick={() => handleSaveEdit(item.id)} className="p-1 hover:bg-green-500/20 rounded text-green-400"><Check className="w-4 h-4"/></button>
+                                <button onClick={handleCancelEdit} className="p-1 hover:bg-rose-500/20 rounded text-rose-400"><X className="w-4 h-4"/></button>
+                              </div>
+                            ) : (
+                              <>
+                                <span className="text-sm font-bold text-sky-400 truncate w-full" title={item.proposedPath || item.evidence?.proposedName}>
+                                  {item.proposedPath || item.evidence?.proposedName}
+                                </span>
+                                <button 
+                                  onClick={() => {
+                                    setEditingItemId(item.id);
+                                    setEditingName(item.evidence?.proposedName || item.proposedPath?.split('\\').pop()?.split('/').pop() || "");
+                                  }} 
+                                  className="text-slate-500 hover:text-sky-400 opacity-0 group-hover:opacity-100 transition-all shrink-0 ml-auto"
+                                  title="Edit Name"
+                                >
+                                  <Edit2 className="w-4 h-4" />
+                                </button>
+                              </>
+                            )}
                           </div>
                         </div>
                         

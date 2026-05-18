@@ -134,6 +134,27 @@ export async function startServer({ port = 3030, dbPath = DEFAULT_DB_PATH } = {}
     }
   });
 
+  app.get("/api/file", async (req, res) => {
+    try {
+      const filePath = req.query.path;
+      if (!filePath) {
+        return res.status(400).send("Path is required");
+      }
+      
+      const fs = await import("node:fs/promises");
+      const absolutePath = path.resolve(filePath);
+      
+      try {
+        await fs.access(absolutePath);
+        res.sendFile(absolutePath);
+      } catch {
+        res.status(404).send("File not found");
+      }
+    } catch (error) {
+      res.status(500).send(error.message);
+    }
+  });
+
   function cleanJSON(str) {
     try {
       const match = str.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
