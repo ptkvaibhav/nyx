@@ -8,6 +8,14 @@ import { buildLocalAudit } from "./organization/local-audit.js";
 const DEFAULT_DB_PATH = ".nyx/nyx.db";
 
 export async function startServer({ port = 3030, dbPath = DEFAULT_DB_PATH } = {}) {
+  // Global error handlers to prevent silent crashes
+  process.on("unhandledRejection", (reason, promise) => {
+    console.error("Unhandled Rejection at:", promise, "reason:", reason);
+  });
+  process.on("uncaughtException", (error) => {
+    console.error("Uncaught Exception:", error);
+  });
+
   // Initialize AI engine
   await initAI();
 
@@ -43,6 +51,9 @@ export async function startServer({ port = 3030, dbPath = DEFAULT_DB_PATH } = {}
           dbPath,
           targetDirectory: directory,
           skippedFiles: skippedFiles || [],
+          onDiscovery: (count, path) => {
+             currentScanProgress = { current: count, total: 0, file: path, status: "discovering" };
+          },
           onProgress: (current, total, file) => {
              currentScanProgress = { current, total, file, status: "running" };
           }
@@ -62,6 +73,47 @@ export async function startServer({ port = 3030, dbPath = DEFAULT_DB_PATH } = {}
     })();
 
     res.json({ success: true, message: "Scan started in background" });
+  });
+
+  app.post("/api/add-password", async (req, res) => {
+    try {
+      const { password, filePath } = req.body;
+      
+      // Test the password immediately if filePath is provided
+      if (filePath) {
+        const fs = await import("node:fs/promises");
+        const pdf = (await import("pdf-parse")).default;
+        const dataBuffer = await fs.readFile(filePath);
+        
+        let isValid = false;
+        
+        const originalWarn = console.warn;
+        console.warn = () => {};
+        try {
+          await pdf(dataBuffer, { password });
+          isValid = true;
+        } catch (e) {
+          isValid = false;
+        } finally {
+          console.warn = originalWarn;
+        }
+        
+        if (!isValid) {
+          return res.json({ success: false, error: "Incorrect password for this file" });
+        }
+      }
+
+      const { loadConfig, saveConfig } = await import("./core/config.js");
+      const { config, configPath } = await loadConfig();
+      if (!config.pdfPasswords) config.pdfPasswords = [];
+      if (!config.pdfPasswords.includes(password)) {
+        config.pdfPasswords.push(password);
+        await saveConfig(config, configPath);
+      }
+      res.json({ success: true });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
   });
 
   app.get("/api/select-directory", async (req, res) => {

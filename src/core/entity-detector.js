@@ -5,6 +5,13 @@ import { askAI } from "./ai.js";
 // In-memory cache to prevent spamming the LLM with identical directory structures.
 const entityCache = new Map();
 
+// Folders that are definitely NOT cohesive entities (individual files inside should be organized)
+const COMMON_NON_ENTITY_NAMES = new Set([
+  "documents", "photos", "pictures", "videos", "music", "downloads", "desktop",
+  "finance", "identity", "legal", "education", "resumes", "tickets", "unsorted",
+  "bank statements", "pay slips", "form 16", "aadhaar", "passport", "pan card"
+]);
+
 /**
  * Uses the local AI to dynamically determine if a directory should be treated 
  * as a single cohesive entity (like an app, project, cache, or backup) 
@@ -13,11 +20,28 @@ const entityCache = new Map();
 export async function detectCohesiveEntity(absoluteDirPath) {
   try {
     const dirName = path.basename(absoluteDirPath);
+    const lowerDirName = dirName.toLowerCase();
     
     // Ignore root drives or empty names
     if (!dirName || dirName.length <= 1) return { isEntity: false };
 
+    // FAST BYPASS: Known common user folders are not cohesive entities
+    if (COMMON_NON_ENTITY_NAMES.has(lowerDirName)) {
+       return { isEntity: false };
+    }
+
     const entries = await fs.readdir(absoluteDirPath, { withFileTypes: true });
+    
+    // Fast path: if empty, not a cohesive entity
+    if (entries.length === 0) return { isEntity: false };
+
+    // Fast path: if directory contains ONLY images/videos, it's a media folder, not a cohesive software entity
+    // However, skip this fast-path if the folder name is hidden (starts with .) like .thumbnails
+    const allFiles = entries.filter(e => e.isFile());
+    const allMedia = allFiles.length > 0 && allFiles.every(e => /\.(jpg|jpeg|png|mp4|mov|gif|webp|heic)$/i.test(e.name));
+    if (allMedia && entries.length === allFiles.length && !dirName.startsWith('.')) {
+       return { isEntity: false };
+    }
     
     // Sample contents (up to 12 items) to give the AI context
     const sampleItems = entries.slice(0, 12).map(e => e.isDirectory() ? `[DIR] ${e.name}` : e.name);
@@ -29,19 +53,28 @@ export async function detectCohesiveEntity(absoluteDirPath) {
       return entityCache.get(cacheKey);
     }
 
-    const prompt = `You are a deterministic file system analysis AI. Your job is to decide if a directory is a "Cohesive Entity".
-A Cohesive Entity is a folder that should NOT have its internal files separated or moved individually. 
-Examples of Cohesive Entities:
-- Software projects (contain source code, config files)
-- Installed applications or games
-- System caches, temporary folders, or metadata folders (e.g., .thumbnails, .cache, .git)
+    const prompt = `You are a strict, deterministic file system analysis AI. Decide if a directory is a "Cohesive Entity".
+A Cohesive Entity is a folder that MUST NOT have its internal files separated or moved.
+Examples:
+- Software projects (contain code, package.json)
+- Installed applications (contain .exe, .dll)
+- System caches or hidden metadata folders (e.g., .thumbnails, .cache, .git)
 - Device backups or OS images
+
+Example 1:
+Directory Name: ".thumbnails"
+Contents Sample: 1.jpg, 2.jpg
+Response: {"isEntity": true, "type": "cache", "reasoning": "Hidden metadata folders like .thumbnails must be kept intact."}
+
+Example 2:
+Directory Name: "Vacation 2023"
+Contents Sample: beach.jpg, mountain.png
+Response: {"isEntity": false, "type": "none", "reasoning": "Standard user folder containing media."}
 
 Directory Name: "${dirName}"
 Contents Sample: ${sample}
 
-Determine if this directory is a Cohesive Entity.
-Return ONLY a raw JSON string matching this exact structure: {"isEntity": true/false, "type": "software|app|cache|backup|none", "reasoning": "Brief explanation"}`;
+Return ONLY a raw JSON string matching the exact structure above.`;
 
     const response = await askAI(prompt, "You are a deterministic system AI returning valid JSON only. Do not use markdown blocks like ```json. Return raw JSON.");
     

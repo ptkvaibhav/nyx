@@ -16,6 +16,7 @@ export async function buildLocalAudit({
   targetDirectory,
   dbPath = ".nyx/nyx.db",
   onProgress,
+  onDiscovery,
   skippedFiles = []
 } = {}) {
   // If targetDirectory is provided, we use that. Otherwise fallback to engagement.md parsing.
@@ -35,7 +36,8 @@ export async function buildLocalAudit({
 
   const scanResult = await scanManagedDirectories({
     managedDirectories,
-    exclusions
+    exclusions,
+    onDiscovery
   });
 
   const catalog = await Catalog.open(dbPath);

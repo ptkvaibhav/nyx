@@ -2,12 +2,14 @@ import { readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { detectCohesiveEntity } from "../core/entity-detector.js";
 
-export async function scanManagedDirectories({ managedDirectories, exclusions = [] }) {
+export async function scanManagedDirectories({ managedDirectories, exclusions = [], onDiscovery }) {
   const normalizedExclusions = exclusions.map((entry) => normalizeSegment(entry));
   const files = [];
   const directories = [];
   const roots = [];
   const missingDirectories = [];
+
+  let discoveryCount = 0;
 
   for (const managedDirectory of managedDirectories) {
     const rootPath = path.resolve(managedDirectory);
@@ -20,7 +22,11 @@ export async function scanManagedDirectories({ managedDirectories, exclusions = 
         currentPath: rootPath,
         exclusions: normalizedExclusions,
         files: rootFiles,
-        directories: rootDirs
+        directories: rootDirs,
+        onDiscovery: (p) => {
+           discoveryCount++;
+           if (onDiscovery) onDiscovery(discoveryCount, p);
+        }
       });
 
       files.push(...rootFiles);
@@ -47,7 +53,8 @@ export async function scanManagedDirectories({ managedDirectories, exclusions = 
   };
 }
 
-async function walkDirectory({ rootPath, currentPath, exclusions, files, directories }) {
+async function walkDirectory({ rootPath, currentPath, exclusions, files, directories, onDiscovery }) {
+  if (onDiscovery) onDiscovery(currentPath);
   const entries = await readdir(currentPath, { withFileTypes: true });
 
   for (const entry of entries) {
@@ -85,7 +92,8 @@ async function walkDirectory({ rootPath, currentPath, exclusions, files, directo
         currentPath: absolutePath,
         exclusions,
         files,
-        directories
+        directories,
+        onDiscovery
       });
       continue;
     }

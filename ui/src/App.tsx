@@ -334,10 +334,25 @@ function App() {
                 <h2 className="text-3xl font-bold tracking-tight">Analyzing Directory...</h2>
                 <p className="text-slate-400 text-lg mb-2">Nyx is currently fingerprinting files and extracting semantic context.</p>
                 
-                {scanProgress.total > 0 && (
+                {scanProgress.status === "discovering" && (
+                  <div className="w-full bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-inner">
+                    <div className="flex justify-between text-xs font-bold text-amber-400 mb-2 uppercase tracking-widest">
+                      <span>Discovering & AI Reasoning</span>
+                      <span>{scanProgress.current} Folders</span>
+                    </div>
+                    <div className="w-full bg-slate-950 rounded-full h-2 overflow-hidden border border-slate-800">
+                      <div className="bg-amber-500 h-2 rounded-full w-full animate-pulse"></div>
+                    </div>
+                    <p className="text-xs font-mono text-slate-500 mt-3 truncate text-left" title={scanProgress.file}>
+                      ...\{scanProgress.file?.split('\\').slice(-2).join('\\')}
+                    </p>
+                  </div>
+                )}
+                
+                {scanProgress.status === "running" && scanProgress.total > 0 && (
                   <div className="w-full bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-inner">
                     <div className="flex justify-between text-xs font-bold text-slate-400 mb-2 uppercase tracking-widest">
-                      <span>Scanning</span>
+                      <span>Scanning & Fingerprinting</span>
                       <span>{Math.round((scanProgress.current / scanProgress.total) * 100)}%</span>
                     </div>
                     <div className="w-full bg-slate-950 rounded-full h-2 overflow-hidden border border-slate-800">
@@ -347,7 +362,7 @@ function App() {
                       ></div>
                     </div>
                     <p className="text-xs font-mono text-slate-500 mt-3 truncate text-left" title={scanProgress.file}>
-                      ...\{scanProgress.file.split('\\').slice(-2).join('\\')}
+                      ...\{scanProgress.file?.split('\\').slice(-2).join('\\')}
                     </p>
                   </div>
                 )}
