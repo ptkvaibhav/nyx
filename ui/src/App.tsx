@@ -171,8 +171,12 @@ function App() {
     startScan(newSkipped);
   };
 
-  const approveItem = async (id: string) => {
-    await fetch(`/api/items/${encodeURIComponent(id)}/approve`, { method: 'POST' });
+  const approveItem = async (id: string, updatedItem?: ReviewItem) => {
+    await fetch(`/api/items/${encodeURIComponent(id)}/approve`, { 
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: updatedItem ? JSON.stringify({ evidence: updatedItem.evidence, proposedPath: updatedItem.proposedPath }) : undefined
+    });
     fetchData();
   };
 
@@ -192,7 +196,23 @@ function App() {
         body: JSON.stringify({ fileInfo: item.evidence })
       });
       const data = await res.json();
+      
       setAiReasoning(prev => ({ ...prev, [item.id]: data.reasoning }));
+
+      // If the AI actually proposed a new name, update the local item state!
+      if (data.proposedName && item.action === 'rename_file') {
+         setItems(prevItems => prevItems.map(i => {
+           if (i.id === item.id) {
+             return {
+               ...i,
+               proposedPath: i.proposedPath?.replace(/[^\\/]+$/, data.proposedName),
+               evidence: { ...i.evidence, proposedName: data.proposedName }
+             };
+           }
+           return i;
+         }));
+      }
+
     } catch {
       setAiReasoning(prev => ({ ...prev, [item.id]: 'Failed to get AI reasoning.' }));
     }
@@ -448,12 +468,20 @@ function App() {
                         <Copy className="w-4 h-4 text-slate-500" />
                         <span className="text-sm font-mono text-slate-400">SHA256: {item.evidence.sha256.slice(0, 16)}...</span>
                       </div>
-                      <button 
-                        onClick={() => approveItem(item.id)}
-                        className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${item.status === 'approved' ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'bg-sky-500/10 text-sky-400 border border-sky-500/20 hover:bg-sky-500/20'}`}
-                      >
-                        {item.status === 'approved' ? '✓ Approved' : 'Approve Deletion'}
-                      </button>
+                      <div className="flex gap-2">
+                        <button 
+                          onClick={() => rejectItem(item.id)}
+                          className="px-4 py-2 rounded-lg text-sm font-bold transition-all bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-500/20"
+                        >
+                          Reject
+                        </button>
+                        <button 
+                          onClick={() => approveItem(item.id, item)}
+                          className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${item.status === 'approved' ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'bg-sky-500/10 text-sky-400 border border-sky-500/20 hover:bg-sky-500/20'}`}
+                        >
+                          {item.status === 'approved' ? '✓ Approved' : 'Approve Deletion'}
+                        </button>
+                      </div>
                    </div>
                    <div className="p-8 grid grid-cols-2 gap-12 relative">
                       <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-10 h-10 bg-slate-900 rounded-full flex items-center justify-center border-4 border-slate-950 z-10">
@@ -554,7 +582,7 @@ function App() {
                       <td className="px-6 py-5 text-right align-top w-56">
                          <div className="flex flex-col gap-2">
                            <button 
-                              onClick={() => approveItem(item.id)}
+                              onClick={() => approveItem(item.id, item)}
                               className={`px-5 py-2 rounded-lg text-sm font-bold transition-all w-full ${item.status === 'approved' ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700 hover:text-white'}`}
                             >
                               {item.status === 'approved' ? '✓ Approved' : 'Approve'}

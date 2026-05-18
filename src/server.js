@@ -211,10 +211,17 @@ Return ONLY a raw JSON string like {"proposedName": "file.pdf", "reasoning": "wh
   app.post("/api/items/:id/approve", async (req, res) => {
     try {
       const { id } = req.params;
+      const { evidence, proposedPath } = req.body || {};
+
       if (id === "all") {
         catalog.approveAllReviewItems();
       } else {
-        catalog.approveReviewItem(id);
+        if (evidence && proposedPath) {
+           catalog.db.prepare("UPDATE review_items SET status = 'approved', approved = 1, updated_at = ?, evidence_json = ?, proposed_path = ? WHERE id = ?")
+             .run(new Date().toISOString(), JSON.stringify(evidence), proposedPath, id);
+        } else {
+           catalog.approveReviewItem(id);
+        }
       }
       res.json({ success: true });
     } catch (error) {
