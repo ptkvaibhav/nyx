@@ -37,6 +37,7 @@ function App() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [items, setItems] = useState<ReviewItem[]>([]);
   const [applying, setApplying] = useState(false);
+  const [proposalFilter, setProposalFilter] = useState<'all' | 'move' | 'rename'>('all');
 
   const [aiExclusions, setAiExclusions] = useState<{ exclusions: string[], reasoning: string } | null>(null);
   const [aiReasoning, setAiReasoning] = useState<Record<string, string>>({});
@@ -491,6 +492,11 @@ function App() {
               <div>
                 <h1 className="text-4xl font-bold tracking-tight">Organization Proposals</h1>
                 <p className="text-slate-400 mt-2 text-lg">Suggestions for moves and renames based on content intelligence.</p>
+                <div className="flex gap-2 mt-6">
+                  <button onClick={() => setProposalFilter('all')} className={`px-4 py-1.5 rounded-full text-sm font-bold transition-all ${proposalFilter === 'all' ? 'bg-sky-500 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>All</button>
+                  <button onClick={() => setProposalFilter('move')} className={`px-4 py-1.5 rounded-full text-sm font-bold transition-all ${proposalFilter === 'move' ? 'bg-indigo-500 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>Moves</button>
+                  <button onClick={() => setProposalFilter('rename')} className={`px-4 py-1.5 rounded-full text-sm font-bold transition-all ${proposalFilter === 'rename' ? 'bg-pink-500 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>Renames</button>
+                </div>
               </div>
               <button 
                 onClick={applyChanges}
@@ -503,31 +509,31 @@ function App() {
             </header>
 
             <div className="bg-slate-900/80 border border-slate-800 rounded-2xl overflow-hidden shadow-xl mt-4">
-              <table className="w-full text-left border-collapse">
+              <table className="w-full text-left border-collapse table-fixed">
                 <thead>
                   <tr className="bg-slate-950 text-slate-400 text-xs uppercase tracking-widest border-b border-slate-800">
-                    <th className="px-6 py-5 font-semibold">Action</th>
+                    <th className="px-6 py-5 font-semibold w-32">Action</th>
                     <th className="px-6 py-5 font-semibold">Details & AI Reasoning</th>
-                    <th className="px-6 py-5 font-semibold text-right">Review</th>
+                    <th className="px-6 py-5 font-semibold text-right w-40">Review</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/50">
-                  {items.filter(i => i.type === 'organization_proposal').map(item => (
+                  {items.filter(i => i.type === 'organization_proposal').filter(i => proposalFilter === 'all' || (proposalFilter === 'move' ? i.action === 'move_file' : i.action === 'rename_file')).map(item => (
                     <tr key={item.id} className="hover:bg-slate-800/40 transition-colors">
-                      <td className="px-6 py-5 align-top w-40">
+                      <td className="px-6 py-5 align-top">
                         <span className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider ${item.action === 'move_file' ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/20' : 'bg-pink-500/20 text-pink-400 border border-pink-500/20'}`}>
                           {item.action.replace('_', ' ')}
                         </span>
                       </td>
-                      <td className="px-6 py-5">
+                      <td className="px-6 py-5 pr-8 truncate">
                         <div className="flex flex-col gap-3 mb-4">
-                          <div className="flex items-center gap-3 text-slate-500 line-through decoration-rose-500/50">
-                            <div className="p-2 bg-slate-950 rounded border border-slate-800"><FileMinus className="w-4 h-4 text-rose-400"/></div>
-                            <span className="text-xs font-mono truncate" title={item.subjectPath}>{item.subjectPath}</span>
+                          <div className="flex items-center gap-3 text-slate-500 line-through decoration-rose-500/50 overflow-hidden">
+                            <div className="p-2 bg-slate-950 rounded border border-slate-800 shrink-0"><FileMinus className="w-4 h-4 text-rose-400"/></div>
+                            <span className="text-xs font-mono truncate w-full" title={item.subjectPath}>{item.subjectPath}</span>
                           </div>
-                          <div className="flex items-center gap-3 bg-sky-500/10 p-3 rounded-xl border border-sky-500/20">
-                            <div className="p-2 bg-sky-500/20 rounded"><FilePlus className="w-4 h-4 text-sky-400"/></div>
-                            <span className="text-sm font-bold text-sky-400 break-all" title={item.proposedPath || item.evidence?.proposedName}>{item.proposedPath || item.evidence?.proposedName}</span>
+                          <div className="flex items-center gap-3 bg-sky-500/10 p-3 rounded-xl border border-sky-500/20 overflow-hidden">
+                            <div className="p-2 bg-sky-500/20 rounded shrink-0"><FilePlus className="w-4 h-4 text-sky-400"/></div>
+                            <span className="text-sm font-bold text-sky-400 truncate w-full" title={item.proposedPath || item.evidence?.proposedName}>{item.proposedPath || item.evidence?.proposedName}</span>
                           </div>
                         </div>
                         

@@ -3,16 +3,10 @@ import { classifyFile } from "../core/classify.js";
 import { inferPurposeDetails } from "./purpose-rules.js";
 
 const GENERIC_NAME_PATTERNS = [
-  /^file[-_ ]?\d*$/i,
-  /^document[-_ ]?\d*$/i,
-  /^scan[-_ ]?\d*$/i,
-  /^copy[-_ ]?\d*$/i,
-  /^duplicate[-_ ]?[a-z0-9]*$/i,
-  /^new[-_ ]?\d*$/i,
-  /^untitled[-_ ]?\d*$/i,
-  /^img[-_ ]?\d+$/i,
-  /^image[-_ ]?\d+$/i,
-  /^photo[-_ ]?\d+$/i
+  /^(file|document|scan|copy|duplicate|new|untitled)[-_ ]?\d*$/i,
+  /^(img|image|photo|vid|video|media|whatsapp|screenshot)[-_ ]?[a-z0-9-_() ]+$/i,
+  /^\d{8,}$/, // long numeric strings
+  /^[a-f0-9]{16,}$/i // long hex hashes
 ];
 
 export function analyzeFileStructure(fileEntry) {
@@ -98,9 +92,13 @@ function buildReasons({ fileNameMatchesContent, folderMatchesContent, betterDest
 }
 
 function shouldRecommendRename({ fileNameMatchesContent, nameLooksGeneric, purpose }) {
-  if (fileNameMatchesContent || !nameLooksGeneric) {
-    return false;
+  // Recommend rename if the name is explicitly generic, OR if it doesn't match content rules
+  // and the purpose isn't just 'other' or 'image' (where renaming might not be super helpful without AI)
+  if (nameLooksGeneric) return true;
+  
+  if (!fileNameMatchesContent && purpose.purpose !== 'image' && purpose.purpose !== 'other') {
+     return true;
   }
 
-  return purpose.matchedByRule && purpose.purpose === "resume";
+  return false;
 }
