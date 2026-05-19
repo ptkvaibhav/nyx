@@ -1,8 +1,12 @@
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const PROJECT_ROOT = path.resolve(__dirname, "..", "..");
 
 export async function loadConfig(configPath = "nyx.config.json") {
-  const resolvedPath = path.resolve(configPath);
+  const resolvedPath = path.isAbsolute(configPath) ? configPath : path.resolve(PROJECT_ROOT, configPath);
   let config = { ai: { model: "gemma" }, pdfPasswords: [], watchedDirectories: [] };
   
   try {
@@ -22,7 +26,7 @@ export async function loadConfig(configPath = "nyx.config.json") {
 }
 
 export async function saveConfig(config, configPath = "nyx.config.json") {
-  const resolvedPath = path.resolve(configPath);
+  const resolvedPath = path.isAbsolute(configPath) ? configPath : path.resolve(PROJECT_ROOT, configPath);
   await writeFile(resolvedPath, JSON.stringify(config, null, 2), "utf8");
 }
 

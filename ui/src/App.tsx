@@ -1,6 +1,6 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 import { useState, useEffect, useRef } from 'react';
-import { Layout, Copy, Wand2, CheckCircle, ArrowRight, RefreshCw, FolderSearch, Cloud, Sparkles, KeyRound, Trash2, Info, FileMinus, FilePlus, FolderOpen } from 'lucide-react';
+import { Layout, Copy, Wand2, CheckCircle, ArrowRight, RefreshCw, FolderSearch, Cloud, Sparkles, KeyRound, Trash2, Info, FileMinus, FilePlus, FolderOpen, Eye, Edit2, Check, X } from 'lucide-react';
 
 interface Stats {
   totalFiles: number;
@@ -37,6 +37,9 @@ function App() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [items, setItems] = useState<ReviewItem[]>([]);
   const [applying, setApplying] = useState(false);
+  const [proposalFilter, setProposalFilter] = useState<'all' | 'move' | 'rename'>('all');
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState<string>("");
 
   const [aiExclusions, setAiExclusions] = useState<{ exclusions: string[], reasoning: string } | null>(null);
   const [aiReasoning, setAiReasoning] = useState<Record<string, string>>({});
@@ -170,14 +173,42 @@ function App() {
     startScan(newSkipped);
   };
 
-  const approveItem = async (id: string) => {
-    await fetch(`/api/items/${encodeURIComponent(id)}/approve`, { method: 'POST' });
+  const approveItem = async (id: string, updatedItem?: ReviewItem) => {
+    await fetch(`/api/items/${encodeURIComponent(id)}/approve`, { 
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: updatedItem ? JSON.stringify({ evidence: updatedItem.evidence, proposedPath: updatedItem.proposedPath }) : undefined
+    });
     fetchData();
   };
 
   const rejectItem = async (id: string) => {
     await fetch(`/api/items/${encodeURIComponent(id)}/reject`, { method: 'POST' });
     fetchData();
+  };
+
+  const handleSaveEdit = async (id: string) => {
+    if (!editingName.trim()) return;
+    
+    // Optimistically update the UI
+    setItems(prev => prev.map(i => {
+      if (i.id === id) {
+        return {
+          ...i,
+          proposedPath: i.proposedPath?.replace(/[^\\/]+$/, editingName),
+          evidence: { ...i.evidence, proposedName: editingName }
+        };
+      }
+      return i;
+    }));
+    
+    setEditingItemId(null);
+    setEditingName("");
+  };
+
+  const handleCancelEdit = () => {
+    setEditingItemId(null);
+    setEditingName("");
   };
 
   const getAiReasoning = async (item: ReviewItem) => {
@@ -191,7 +222,23 @@ function App() {
         body: JSON.stringify({ fileInfo: item.evidence })
       });
       const data = await res.json();
+      
       setAiReasoning(prev => ({ ...prev, [item.id]: data.reasoning }));
+
+      // If the AI actually proposed a new name, update the local item state!
+      if (data.proposedName && item.action === 'rename_file') {
+         setItems(prevItems => prevItems.map(i => {
+           if (i.id === item.id) {
+             return {
+               ...i,
+               proposedPath: i.proposedPath?.replace(/[^\\/]+$/, data.proposedName),
+               evidence: { ...i.evidence, proposedName: data.proposedName }
+             };
+           }
+           return i;
+         }));
+      }
+
     } catch {
       setAiReasoning(prev => ({ ...prev, [item.id]: 'Failed to get AI reasoning.' }));
     }
@@ -334,10 +381,25 @@ function App() {
                 <h2 className="text-3xl font-bold tracking-tight">Analyzing Directory...</h2>
                 <p className="text-slate-400 text-lg mb-2">Nyx is currently fingerprinting files and extracting semantic context.</p>
                 
-                {scanProgress.total > 0 && (
+                {scanProgress.status === "discovering" && (
+                  <div className="w-full bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-inner">
+                    <div className="flex justify-between text-xs font-bold text-amber-400 mb-2 uppercase tracking-widest">
+                      <span>Discovering & AI Reasoning</span>
+                      <span>{scanProgress.current} Folders</span>
+                    </div>
+                    <div className="w-full bg-slate-950 rounded-full h-2 overflow-hidden border border-slate-800">
+                      <div className="bg-amber-500 h-2 rounded-full w-full animate-pulse"></div>
+                    </div>
+                    <p className="text-xs font-mono text-slate-500 mt-3 truncate text-left" title={scanProgress.file}>
+                      ...\{scanProgress.file?.split('\\').slice(-2).join('\\')}
+                    </p>
+                  </div>
+                )}
+                
+                {scanProgress.status === "running" && scanProgress.total > 0 && (
                   <div className="w-full bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-inner">
                     <div className="flex justify-between text-xs font-bold text-slate-400 mb-2 uppercase tracking-widest">
-                      <span>Scanning</span>
+                      <span>Scanning & Fingerprinting</span>
                       <span>{Math.round((scanProgress.current / scanProgress.total) * 100)}%</span>
                     </div>
                     <div className="w-full bg-slate-950 rounded-full h-2 overflow-hidden border border-slate-800">
@@ -347,7 +409,7 @@ function App() {
                       ></div>
                     </div>
                     <p className="text-xs font-mono text-slate-500 mt-3 truncate text-left" title={scanProgress.file}>
-                      ...\{scanProgress.file.split('\\').slice(-2).join('\\')}
+                      ...\{scanProgress.file?.split('\\').slice(-2).join('\\')}
                     </p>
                   </div>
                 )}
@@ -431,13 +493,24 @@ function App() {
                       <div className="flex items-center gap-3">
                         <Copy className="w-4 h-4 text-slate-500" />
                         <span className="text-sm font-mono text-slate-400">SHA256: {item.evidence.sha256.slice(0, 16)}...</span>
+                        <a href={`/api/file?path=${encodeURIComponent(item.subjectPath)}`} target="_blank" rel="noreferrer" className="text-sky-400 hover:text-sky-300 transition-colors ml-2" title="View File">
+                          <Eye className="w-4 h-4" />
+                        </a>
                       </div>
-                      <button 
-                        onClick={() => approveItem(item.id)}
-                        className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${item.status === 'approved' ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'bg-sky-500/10 text-sky-400 border border-sky-500/20 hover:bg-sky-500/20'}`}
-                      >
-                        {item.status === 'approved' ? '✓ Approved' : 'Approve Deletion'}
-                      </button>
+                      <div className="flex gap-2">
+                        <button 
+                          onClick={() => rejectItem(item.id)}
+                          className="px-4 py-2 rounded-lg text-sm font-bold transition-all bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-500/20"
+                        >
+                          Reject
+                        </button>
+                        <button 
+                          onClick={() => approveItem(item.id, item)}
+                          className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${item.status === 'approved' ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'bg-sky-500/10 text-sky-400 border border-sky-500/20 hover:bg-sky-500/20'}`}
+                        >
+                          {item.status === 'approved' ? '✓ Approved' : 'Approve Deletion'}
+                        </button>
+                      </div>
                    </div>
                    <div className="p-8 grid grid-cols-2 gap-12 relative">
                       <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-10 h-10 bg-slate-900 rounded-full flex items-center justify-center border-4 border-slate-950 z-10">
@@ -476,6 +549,11 @@ function App() {
               <div>
                 <h1 className="text-4xl font-bold tracking-tight">Organization Proposals</h1>
                 <p className="text-slate-400 mt-2 text-lg">Suggestions for moves and renames based on content intelligence.</p>
+                <div className="flex gap-2 mt-6">
+                  <button onClick={() => setProposalFilter('all')} className={`px-4 py-1.5 rounded-full text-sm font-bold transition-all ${proposalFilter === 'all' ? 'bg-sky-500 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>All</button>
+                  <button onClick={() => setProposalFilter('move')} className={`px-4 py-1.5 rounded-full text-sm font-bold transition-all ${proposalFilter === 'move' ? 'bg-indigo-500 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>Moves</button>
+                  <button onClick={() => setProposalFilter('rename')} className={`px-4 py-1.5 rounded-full text-sm font-bold transition-all ${proposalFilter === 'rename' ? 'bg-pink-500 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>Renames</button>
+                </div>
               </div>
               <button 
                 onClick={applyChanges}
@@ -488,31 +566,65 @@ function App() {
             </header>
 
             <div className="bg-slate-900/80 border border-slate-800 rounded-2xl overflow-hidden shadow-xl mt-4">
-              <table className="w-full text-left border-collapse">
+              <table className="w-full text-left border-collapse table-fixed">
                 <thead>
                   <tr className="bg-slate-950 text-slate-400 text-xs uppercase tracking-widest border-b border-slate-800">
-                    <th className="px-6 py-5 font-semibold">Action</th>
+                    <th className="px-6 py-5 font-semibold w-32">Action</th>
                     <th className="px-6 py-5 font-semibold">Details & AI Reasoning</th>
-                    <th className="px-6 py-5 font-semibold text-right">Review</th>
+                    <th className="px-6 py-5 font-semibold text-right w-40">Review</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/50">
-                  {items.filter(i => i.type === 'organization_proposal').map(item => (
+                  {items.filter(i => i.type === 'organization_proposal').filter(i => proposalFilter === 'all' || (proposalFilter === 'move' ? i.action === 'move_file' : i.action === 'rename_file')).map(item => (
                     <tr key={item.id} className="hover:bg-slate-800/40 transition-colors">
-                      <td className="px-6 py-5 align-top w-40">
+                      <td className="px-6 py-5 align-top">
                         <span className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider ${item.action === 'move_file' ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/20' : 'bg-pink-500/20 text-pink-400 border border-pink-500/20'}`}>
                           {item.action.replace('_', ' ')}
                         </span>
                       </td>
-                      <td className="px-6 py-5">
+                      <td className="px-6 py-5 pr-8 truncate">
                         <div className="flex flex-col gap-3 mb-4">
-                          <div className="flex items-center gap-3 text-slate-500 line-through decoration-rose-500/50">
-                            <div className="p-2 bg-slate-950 rounded border border-slate-800"><FileMinus className="w-4 h-4 text-rose-400"/></div>
-                            <span className="text-xs font-mono truncate" title={item.subjectPath}>{item.subjectPath}</span>
+                          <div className="flex items-center gap-3 text-slate-500 line-through decoration-rose-500/50 overflow-hidden">
+                            <div className="p-2 bg-slate-950 rounded border border-slate-800 shrink-0"><FileMinus className="w-4 h-4 text-rose-400"/></div>
+                            <span className="text-xs font-mono truncate w-full" title={item.subjectPath}>{item.subjectPath}</span>
+                            <a href={`/api/file?path=${encodeURIComponent(item.subjectPath)}`} target="_blank" rel="noreferrer" className="text-sky-400 hover:text-sky-300 transition-colors ml-auto shrink-0" title="View File">
+                              <Eye className="w-4 h-4" />
+                            </a>
                           </div>
-                          <div className="flex items-center gap-3 bg-sky-500/10 p-3 rounded-xl border border-sky-500/20">
-                            <div className="p-2 bg-sky-500/20 rounded"><FilePlus className="w-4 h-4 text-sky-400"/></div>
-                            <span className="text-sm font-bold text-sky-400 break-all" title={item.proposedPath || item.evidence?.proposedName}>{item.proposedPath || item.evidence?.proposedName}</span>
+                          
+                          <div className="flex items-center gap-3 bg-sky-500/10 p-3 rounded-xl border border-sky-500/20 overflow-hidden group">
+                            <div className="p-2 bg-sky-500/20 rounded shrink-0"><FilePlus className="w-4 h-4 text-sky-400"/></div>
+                            
+                            {editingItemId === item.id ? (
+                              <div className="flex items-center gap-2 w-full">
+                                <input 
+                                  type="text" 
+                                  value={editingName} 
+                                  onChange={e => setEditingName(e.target.value)}
+                                  className="flex-1 bg-slate-950 border border-sky-500 rounded px-2 py-1 text-sm font-bold text-sky-400 focus:outline-none"
+                                  autoFocus
+                                  onKeyDown={e => e.key === 'Enter' && handleSaveEdit(item.id)}
+                                />
+                                <button onClick={() => handleSaveEdit(item.id)} className="p-1 hover:bg-green-500/20 rounded text-green-400"><Check className="w-4 h-4"/></button>
+                                <button onClick={handleCancelEdit} className="p-1 hover:bg-rose-500/20 rounded text-rose-400"><X className="w-4 h-4"/></button>
+                              </div>
+                            ) : (
+                              <>
+                                <span className="text-sm font-bold text-sky-400 truncate w-full" title={item.proposedPath || item.evidence?.proposedName}>
+                                  {item.proposedPath || item.evidence?.proposedName}
+                                </span>
+                                <button 
+                                  onClick={() => {
+                                    setEditingItemId(item.id);
+                                    setEditingName(item.evidence?.proposedName || item.proposedPath?.split('\\').pop()?.split('/').pop() || "");
+                                  }} 
+                                  className="text-slate-500 hover:text-sky-400 opacity-0 group-hover:opacity-100 transition-all shrink-0 ml-auto"
+                                  title="Edit Name"
+                                >
+                                  <Edit2 className="w-4 h-4" />
+                                </button>
+                              </>
+                            )}
                           </div>
                         </div>
                         
@@ -533,7 +645,7 @@ function App() {
                       <td className="px-6 py-5 text-right align-top w-56">
                          <div className="flex flex-col gap-2">
                            <button 
-                              onClick={() => approveItem(item.id)}
+                              onClick={() => approveItem(item.id, item)}
                               className={`px-5 py-2 rounded-lg text-sm font-bold transition-all w-full ${item.status === 'approved' ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700 hover:text-white'}`}
                             >
                               {item.status === 'approved' ? '✓ Approved' : 'Approve'}

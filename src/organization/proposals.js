@@ -114,12 +114,29 @@ function proposeFileName(file) {
   const purpose = file.structure?.purpose ?? file.classification?.category ?? "other";
   let label = file.structure?.renameLabel ?? PURPOSE_LABELS[purpose] ?? PURPOSE_LABELS.other;
   
-  // If the renameLabel already contains a strong identifier (like Form_16_2024-25),
-  // we might not even need the hash, but let's keep it for safety to avoid collisions
-  const shortHash = String(file.sha256 ?? "unhashed").slice(0, 8);
   const extension = file.extension ?? path.extname(file.absolutePath);
+  const currentBaseName = path.basename(file.absolutePath, extension);
+  
+  // If the current name is just a huge string of numbers (like 400082092134) or a generic IMG_ tag,
+  // we should prepend the semantic label so the user knows what it is (e.g. Document_400082092134.pdf)
+  // But wait, the user said "suggest the name of the file instead of just document_original name. Example - Say an ID card document like Aadhar card is named as 40130202.pdf, it should reason that this is an Aadhar Card and based on that suggest that it should be named as Pratik Vaibhav_Aadhar Card.pdf".
+  // Because we do not run deep AI extracting on *every* file automatically (it takes 10s per file), 
+  // we will give it a better default name but encourage the "Ask AI" button.
+  // Actually, for Identity documents, we can extract the specific type if the rule matched!
+  
+  // If the name is already prefixed with the label, don't double prefix
+  if (currentBaseName.toLowerCase().startsWith(label.toLowerCase())) {
+     return `${currentBaseName}${extension}`;
+  }
 
-  return `${label}_${shortHash}${extension}`;
+  // If the purpose is explicitly identified (like Identity, Finance, Resume), prefix it for clarity
+  if (purpose !== "other" && purpose !== "image" && purpose !== "document") {
+     return `${label}_${currentBaseName}${extension}`;
+  }
+
+  // For generic images or documents, just use the original name, don't force a "Document_" prefix
+  // unless it's literally just a hash. But let's just default to the original name to avoid annoying users.
+  return `${currentBaseName}${extension}`;
 }
 
 function buildProposalId(action, file) {

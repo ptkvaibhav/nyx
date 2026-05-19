@@ -16,6 +16,7 @@ export async function buildLocalAudit({
   targetDirectory,
   dbPath = ".nyx/nyx.db",
   onProgress,
+  onDiscovery,
   skippedFiles = []
 } = {}) {
   // If targetDirectory is provided, we use that. Otherwise fallback to engagement.md parsing.
@@ -23,19 +24,23 @@ export async function buildLocalAudit({
   let exclusions = [".git", "node_modules", "Temp", "packages", "Drive", ".nyx"];
   let engagement = null;
   
-  if (!targetDirectory) {
-    try {
-      engagement = await loadEngagement(engagementPath);
+  try {
+    engagement = await loadEngagement(engagementPath);
+    if (!targetDirectory) {
       managedDirectories = engagement.managedDirectories;
-      exclusions = engagement.defaultExclusions;
-    } catch (e) {
-      console.warn("Could not load engagement.md, using default exclusions.", e.message);
     }
+    exclusions = engagement.defaultExclusions;
+  } catch (e) {
+    console.warn("Could not load engagement.md, using default exclusions.", e.message);
+    engagement = {
+       safeIrrelevanceRules: ["exact duplicate files by content hash"]
+    };
   }
 
   const scanResult = await scanManagedDirectories({
     managedDirectories,
-    exclusions
+    exclusions,
+    onDiscovery
   });
 
   const catalog = await Catalog.open(dbPath);

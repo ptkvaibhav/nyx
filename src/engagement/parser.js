@@ -1,8 +1,12 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const PROJECT_ROOT = path.resolve(__dirname, "..", "..");
 
 export async function loadEngagement(engagementPath = "docs/engagement.md") {
-  const resolvedPath = path.resolve(engagementPath);
+  const resolvedPath = path.isAbsolute(engagementPath) ? engagementPath : path.resolve(PROJECT_ROOT, engagementPath);
   const markdown = await readFile(resolvedPath, "utf8");
 
   return {

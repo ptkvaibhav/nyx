@@ -128,6 +128,36 @@ export function inferPurposeDetails({ absolutePath = "", baseName = "", extensio
     };
   }
 
+  // Specific Deep Content Rule: Aadhaar Card
+  if (normalizedBaseName.includes("aadhaar") || /unique identification authority of india/i.test(extractedText) || (/government of india/i.test(extractedText) && /aadhaar/i.test(extractedText))) {
+     return {
+       purpose: "identity",
+       expectedFolders: ["Identity"],
+       matchedByRule: true,
+       renameLabel: "Aadhaar_Card"
+     };
+  }
+
+  // Specific Deep Content Rule: PAN Card
+  if ((normalizedBaseName.includes("pan") && !normalizedBaseName.includes("company")) || (/income tax department/i.test(extractedText) && /permanent account number/i.test(extractedText))) {
+     return {
+       purpose: "identity",
+       expectedFolders: ["Identity"],
+       matchedByRule: true,
+       renameLabel: "PAN_Card"
+     };
+  }
+
+  // Specific Deep Content Rule: Passport
+  if (normalizedBaseName.includes("passport") || (/republic of india/i.test(extractedText) && /passport/i.test(extractedText))) {
+     return {
+       purpose: "identity",
+       expectedFolders: ["Identity"],
+       matchedByRule: true,
+       renameLabel: "Passport"
+     };
+  }
+
   // If it's a known code extension, prefer the code category/purpose to avoid keyword misclassification
   if (CODE_EXTENSIONS.has(normalizedExtension)) {
     return {

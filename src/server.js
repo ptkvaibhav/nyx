@@ -8,6 +8,14 @@ import { buildLocalAudit } from "./organization/local-audit.js";
 const DEFAULT_DB_PATH = ".nyx/nyx.db";
 
 export async function startServer({ port = 3030, dbPath = DEFAULT_DB_PATH } = {}) {
+  // Global error handlers to prevent silent crashes
+  process.on("unhandledRejection", (reason, promise) => {
+    console.error("Unhandled Rejection at:", promise, "reason:", reason);
+  });
+  process.on("uncaughtException", (error) => {
+    console.error("Uncaught Exception:", error);
+  });
+
   // Initialize AI engine
   await initAI();
 
@@ -43,6 +51,9 @@ export async function startServer({ port = 3030, dbPath = DEFAULT_DB_PATH } = {}
           dbPath,
           targetDirectory: directory,
           skippedFiles: skippedFiles || [],
+          onDiscovery: (count, path) => {
+             currentScanProgress = { current: count, total: 0, file: path, status: "discovering" };
+          },
           onProgress: (current, total, file) => {
              currentScanProgress = { current, total, file, status: "running" };
           }
@@ -64,6 +75,47 @@ export async function startServer({ port = 3030, dbPath = DEFAULT_DB_PATH } = {}
     res.json({ success: true, message: "Scan started in background" });
   });
 
+  app.post("/api/add-password", async (req, res) => {
+    try {
+      const { password, filePath } = req.body;
+      
+      // Test the password immediately if filePath is provided
+      if (filePath) {
+        const fs = await import("node:fs/promises");
+        const pdf = (await import("pdf-parse")).default;
+        const dataBuffer = await fs.readFile(filePath);
+        
+        let isValid = false;
+        
+        const originalWarn = console.warn;
+        console.warn = () => {};
+        try {
+          await pdf(dataBuffer, { password });
+          isValid = true;
+        } catch (e) {
+          isValid = false;
+        } finally {
+          console.warn = originalWarn;
+        }
+        
+        if (!isValid) {
+          return res.json({ success: false, error: "Incorrect password for this file" });
+        }
+      }
+
+      const { loadConfig, saveConfig } = await import("./core/config.js");
+      const { config, configPath } = await loadConfig();
+      if (!config.pdfPasswords) config.pdfPasswords = [];
+      if (!config.pdfPasswords.includes(password)) {
+        config.pdfPasswords.push(password);
+        await saveConfig(config, configPath);
+      }
+      res.json({ success: true });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   app.get("/api/select-directory", async (req, res) => {
     try {
       const { execSync } = await import("node:child_process");
@@ -79,6 +131,27 @@ export async function startServer({ port = 3030, dbPath = DEFAULT_DB_PATH } = {}
       res.json({ directory: result });
     } catch (e) {
       res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get("/api/file", async (req, res) => {
+    try {
+      const filePath = req.query.path;
+      if (!filePath) {
+        return res.status(400).send("Path is required");
+      }
+      
+      const fs = await import("node:fs/promises");
+      const absolutePath = path.resolve(filePath);
+      
+      try {
+        await fs.access(absolutePath);
+        res.sendFile(absolutePath);
+      } catch {
+        res.status(404).send("File not found");
+      }
+    } catch (error) {
+      res.status(500).send(error.message);
     }
   });
 
@@ -159,10 +232,17 @@ Return ONLY a raw JSON string like {"proposedName": "file.pdf", "reasoning": "wh
   app.post("/api/items/:id/approve", async (req, res) => {
     try {
       const { id } = req.params;
+      const { evidence, proposedPath } = req.body || {};
+
       if (id === "all") {
         catalog.approveAllReviewItems();
       } else {
-        catalog.approveReviewItem(id);
+        if (evidence && proposedPath) {
+           catalog.db.prepare("UPDATE review_items SET status = 'approved', approved = 1, updated_at = ?, evidence_json = ?, proposed_path = ? WHERE id = ?")
+             .run(new Date().toISOString(), JSON.stringify(evidence), proposedPath, id);
+        } else {
+           catalog.approveReviewItem(id);
+        }
       }
       res.json({ success: true });
     } catch (error) {
