@@ -9,6 +9,43 @@ export const DEFAULT_FOLDERS_BY_CATEGORY = {
   video: ["Videos"]
 };
 
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+function extractDate(text, baseName) {
+  // Try to find YYYY-MM or MM-YYYY or DD-MM-YYYY or Month YYYY
+  const combined = (text + " " + baseName).replace(/\n/g, ' ');
+  
+  // Look for "Month YYYY" e.g., "January 2024" or "Jan 2024"
+  const monthNames = "(january|jan|february|feb|march|mar|april|apr|may|june|jun|july|jul|august|aug|september|sep|october|oct|november|nov|december|dec)";
+  const monthYearRegex = new RegExp(monthNames + "\\s*,?\\s*-?\\s*(\\d{4})", "i");
+  let match = combined.match(monthYearRegex);
+  if (match) {
+    const mStr = match[1].toLowerCase().substring(0, 3);
+    const mIndex = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"].indexOf(mStr);
+    return { year: match[2], month: String(mIndex + 1).padStart(2, '0') + "_" + MONTHS[mIndex] };
+  }
+
+  // Look for YYYY-MM or YYYY_MM
+  match = combined.match(/20[0-2]\d[-_](0[1-9]|1[0-2])/);
+  if (match) {
+    const mIndex = parseInt(match[1], 10) - 1;
+    return { year: match[0].substring(0,4), month: match[1] + "_" + MONTHS[mIndex] };
+  }
+
+  // Look for DD/MM/YYYY or DD-MM-YYYY
+  match = combined.match(/(?:^|\D)([0-3]\d)[/.-](0[1-9]|1[0-2])[/.-](20[0-2]\d)(?:\D|$)/);
+  if (match) {
+    const mIndex = parseInt(match[2], 10) - 1;
+    return { year: match[3], month: match[2] + "_" + MONTHS[mIndex] };
+  }
+
+  // Look for standalone year 2010-2029
+  match = combined.match(/(?:^|\D)(20[1-2]\d)(?:\D|$)/);
+  if (match) return { year: match[1], month: null };
+
+  return { year: null, month: null };
+}
+
 export const PURPOSE_RULES = [
   {
     purpose: "resume",
@@ -21,12 +58,6 @@ export const PURPOSE_RULES = [
     expectedFolders: ["Tickets"],
     renameLabel: "Travel_Ticket",
     pattern: /(^|[\s._-])(ticket|flight|train|irctc|boarding|itinerary|booking|cleartrip|makemytrip)([\s._-]|$)/i
-  },
-  {
-    purpose: "finance",
-    expectedFolders: ["Finance"],
-    renameLabel: "Finance_Record",
-    pattern: /(^|[\s._-])(invoice|receipt|tax-?form|pay[\s._-]?slip|salary[\s._-]?slip|epfo-?statement|bank[\s._-]?statement|account[\s._-]?statement|transactions?|nomination-?form|ctc-?letter|increment-?letter)([\s._-]|$)/i
   },
   {
     purpose: "insurance",
@@ -72,136 +103,126 @@ export const PURPOSE_RULES = [
   }
 ];
 
-// Supports: _v1, -v1, .v1, (1), - Copy, - Copy (1), 2024.4, 1.2.3
-export const VERSION_PATTERN = /([._-]v?(\d+([._]\d+)*))|(\((\d+)\))|([- ]Copy( \((\d+)\))?)$/i;
+export const VERSION_PATTERN = /([._-]v?(\d+([._]\d+)*))|(\\((\d+)\\))|([- ]Copy( \\((\d+)\\))?)$/i;
 
 export const CODE_EXTENSIONS = new Set([
   ".js", ".ts", ".jsx", ".tsx", ".py", ".java", ".c", ".cpp", ".h", ".hpp", ".cs", ".go", ".rs", ".rb", ".php", ".html", ".css", ".sql", ".sh", ".bat", ".ps1", ".yml", ".yaml", ".json", ".xml", ".md", ".sol"
 ]);
 
 export function inferPurposeDetails({ absolutePath = "", baseName = "", extension = "", category = "other", extractedText = "", isEntity = false, entityType = "" }) {
-  // If it's a cohesive entity, categorize it immediately to prevent fragmentation
   if (isEntity) {
-    if (entityType === "software_project") {
-       return {
-         purpose: "code",
-         expectedFolders: ["Projects"],
-         matchedByRule: true,
-         renameLabel: "Project"
-       };
-    }
-    if (entityType === "application") {
-       return {
-         purpose: "installer",
-         expectedFolders: ["Applications"],
-         matchedByRule: true,
-         renameLabel: "App"
-       };
-    }
+    if (entityType === "software_project") return { purpose: "code", expectedFolders: ["Projects"], matchedByRule: true, renameLabel: "Project" };
+    if (entityType === "application") return { purpose: "installer", expectedFolders: ["Applications"], matchedByRule: true, renameLabel: "App" };
   }
 
   const normalizedBaseName = String(baseName || path.basename(absolutePath)).toLowerCase();
   const normalizedExtension = String(extension || path.extname(absolutePath)).toLowerCase();
   
-  // Specific Deep Content Rule: Form 16 Segregation
-  if (normalizedBaseName.includes("f16") || normalizedBaseName.includes("form 16") || /form\s*no\.?\s*16/i.test(extractedText)) {
-    // Try to extract Assessment Year from text (e.g. "Assessment Year: 2024-25" or "Assessment Year 2024-25")
-    let yearMatch = extractedText.match(/Assessment Year[:\s]*(\d{4}-\d{2})/i) || extractedText.match(/(\d{4}-\d{2})/);
-    // Fallback to year in filename
-    if (!yearMatch) {
-       yearMatch = normalizedBaseName.match(/(\d{4}-\d{2})/);
+  const dateInfo = extractDate(extractedText, normalizedBaseName);
+  
+  // Specific Deep Content Rule: Pay Slips
+  if (/pay[\s._-]?slip/i.test(normalizedBaseName) || /salary[\s._-]?slip/i.test(normalizedBaseName) || /pay\s*slip/i.test(extractedText) || /salary\s*slip/i.test(extractedText)) {
+    let folder = "Finance/Pay_Slips";
+    let label = "Pay_Slip";
+    if (dateInfo.year) {
+      folder += `/${dateInfo.year}`;
+      label += `_${dateInfo.year}`;
+      if (dateInfo.month) {
+        folder += `/${dateInfo.month}`;
+        label += `_${dateInfo.month.split('_')[1]}`;
+      }
     }
-    
-    let folder = "Finance/Form_16";
-    if (yearMatch) {
-       // Convert '2024-25' to '2024' or keep '2024-25'
-       const yearStr = yearMatch[1]; 
-       const startYear = yearStr.split('-')[0];
-       folder = `Finance/Form_16/${startYear}`;
-    }
+    return { purpose: "finance", expectedFolders: [folder], matchedByRule: true, renameLabel: label };
+  }
 
-    return {
-      purpose: "finance",
-      expectedFolders: [folder],
-      matchedByRule: true,
-      renameLabel: "Form_16"
-    };
+  // Specific Deep Content Rule: Form 16 / IT Returns
+  if (normalizedBaseName.includes("f16") || normalizedBaseName.includes("form 16") || /form\s*no\\.?\s*16/i.test(extractedText) || /income\s*tax\s*return/i.test(extractedText) || /it\s*computation/i.test(extractedText)) {
+    let yearMatch = extractedText.match(/Assessment Year[:\s]*(\d{4}-\d{2})/i) || extractedText.match(/(\d{4}-\d{2})/);
+    if (!yearMatch) yearMatch = normalizedBaseName.match(/(\d{4}-\d{2})/);
+    let folder = "Finance/IT_Returns";
+    let label = normalizedBaseName.includes("form") || /form/i.test(extractedText) ? "Form_16" : "IT_Computation";
+    if (yearMatch) {
+       const startYear = yearMatch[1].split('-')[0];
+       folder += `/${startYear}`;
+       label += `_${startYear}`;
+    } else if (dateInfo.year) {
+       folder += `/${dateInfo.year}`;
+       label += `_${dateInfo.year}`;
+    }
+    return { purpose: "finance", expectedFolders: [folder], matchedByRule: true, renameLabel: label };
+  }
+
+  // Specific Deep Content Rule: EPF Statement
+  if (/epf/i.test(normalizedBaseName) || /epfo/i.test(normalizedBaseName) || /provident\s*fund/i.test(extractedText) || /epfo\s*statement/i.test(extractedText)) {
+    let folder = "Finance/EPF";
+    let label = "EPF_Statement";
+    if (dateInfo.year) {
+       folder += `/${dateInfo.year}`;
+       label += `_${dateInfo.year}`;
+    }
+    return { purpose: "finance", expectedFolders: [folder], matchedByRule: true, renameLabel: label };
   }
 
   // Specific Deep Content Rule: Bank Statement
   if (normalizedBaseName.includes("statement") || /account\s*statement/i.test(extractedText) || /bank\s*statement/i.test(extractedText) || (/account\s*summary/i.test(extractedText) && /balance/i.test(extractedText))) {
-     return {
-       purpose: "finance",
-       expectedFolders: ["Finance/Bank_Statements"],
-       matchedByRule: true,
-       renameLabel: "Bank_Statement"
-     };
+     let folder = "Finance/Bank_Statements";
+     let label = "Bank_Statement";
+     
+     // Try to extract bank name
+     let bankName = "";
+     if (/hdfc/i.test(extractedText) || /hdfc/i.test(normalizedBaseName)) bankName = "HDFC";
+     else if (/sbi/i.test(extractedText) || /state bank/i.test(extractedText) || /sbi/i.test(normalizedBaseName)) bankName = "SBI";
+     else if (/icici/i.test(extractedText) || /icici/i.test(normalizedBaseName)) bankName = "ICICI";
+     else if (/axis/i.test(extractedText) || /axis/i.test(normalizedBaseName)) bankName = "Axis";
+     
+     if (bankName) label = `${bankName}_Statement`;
+     
+     if (dateInfo.year) {
+       folder += `/${dateInfo.year}`;
+       label += `_${dateInfo.year}`;
+       if (dateInfo.month) {
+         folder += `/${dateInfo.month}`;
+         label += `_${dateInfo.month.split('_')[1]}`;
+       }
+     }
+     return { purpose: "finance", expectedFolders: [folder], matchedByRule: true, renameLabel: label };
   }
 
   // Specific Deep Content Rule: Aadhaar Card
   if (normalizedBaseName.includes("aadhaar") || /unique identification authority of india/i.test(extractedText) || (/government of india/i.test(extractedText) && /aadhaar/i.test(extractedText))) {
-     return {
-       purpose: "identity",
-       expectedFolders: ["Identity"],
-       matchedByRule: true,
-       renameLabel: "Aadhaar_Card"
-     };
+     return { purpose: "identity", expectedFolders: ["Identity/Aadhaar"], matchedByRule: true, renameLabel: "Aadhaar_Card" };
   }
 
   // Specific Deep Content Rule: PAN Card
   if ((normalizedBaseName.includes("pan") && !normalizedBaseName.includes("company")) || (/income tax department/i.test(extractedText) && /permanent account number/i.test(extractedText))) {
-     return {
-       purpose: "identity",
-       expectedFolders: ["Identity"],
-       matchedByRule: true,
-       renameLabel: "PAN_Card"
-     };
+     return { purpose: "identity", expectedFolders: ["Identity/PAN"], matchedByRule: true, renameLabel: "PAN_Card" };
   }
 
   // Specific Deep Content Rule: Passport
   if (normalizedBaseName.includes("passport") || (/republic of india/i.test(extractedText) && /passport/i.test(extractedText))) {
-     return {
-       purpose: "identity",
-       expectedFolders: ["Identity"],
-       matchedByRule: true,
-       renameLabel: "Passport"
-     };
+     return { purpose: "identity", expectedFolders: ["Identity/Passport"], matchedByRule: true, renameLabel: "Passport" };
+  }
+  
+  // Specific Deep Content Rule: Offer Letter
+  if (/offer[\s._-]?letter/i.test(normalizedBaseName) || /appointment[\s._-]?letter/i.test(normalizedBaseName) || (/offer of employment/i.test(extractedText))) {
+     let label = "Offer_Letter";
+     if (dateInfo.year) label += `_${dateInfo.year}`;
+     return { purpose: "legal", expectedFolders: ["Legal/Offer_Letters"], matchedByRule: true, renameLabel: label };
   }
 
-  // If it's a known code extension, prefer the code category/purpose to avoid keyword misclassification
   if (CODE_EXTENSIONS.has(normalizedExtension)) {
-    return {
-      purpose: "code",
-      expectedFolders: DEFAULT_FOLDERS_BY_CATEGORY.code,
-      matchedByRule: false,
-      renameLabel: null
-    };
+    return { purpose: "code", expectedFolders: DEFAULT_FOLDERS_BY_CATEGORY.code, matchedByRule: false, renameLabel: null };
   }
 
   for (const rule of PURPOSE_RULES) {
     if (rule.pattern.test(normalizedBaseName)) {
-      return {
-        purpose: rule.purpose,
-        expectedFolders: rule.expectedFolders,
-        matchedByRule: true,
-        renameLabel: rule.renameLabel
-      };
+      return { purpose: rule.purpose, expectedFolders: rule.expectedFolders, matchedByRule: true, renameLabel: rule.renameLabel };
     }
   }
 
   if ([".exe", ".msi", ".dmg", ".pkg", ".appx"].includes(normalizedExtension)) {
-    return {
-      purpose: "installer",
-      expectedFolders: ["Installers"],
-      matchedByRule: true,
-      renameLabel: "Installer"
-    };
+    return { purpose: "installer", expectedFolders: ["Installers"], matchedByRule: true, renameLabel: "Installer" };
   }
 
-  return {
-    purpose: category,
-    expectedFolders: DEFAULT_FOLDERS_BY_CATEGORY[category] ?? DEFAULT_FOLDERS_BY_CATEGORY.other,
-    matchedByRule: false,
-    renameLabel: null
-  };
+  return { purpose: category, expectedFolders: DEFAULT_FOLDERS_BY_CATEGORY[category] ?? DEFAULT_FOLDERS_BY_CATEGORY.other, matchedByRule: false, renameLabel: null };
 }
