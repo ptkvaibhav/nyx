@@ -54,12 +54,16 @@ export async function detectCohesiveEntity(absoluteDirPath) {
     }
 
     const prompt = `You are a strict, deterministic file system analysis AI. Decide if a directory is a "Cohesive Entity".
-A Cohesive Entity is a folder that MUST NOT have its internal files separated or moved.
+A Cohesive Entity is a strict, machine-generated folder that MUST NOT have its internal files separated or moved.
 Examples:
-- Software projects (contain code, package.json)
-- Installed applications (contain .exe, .dll)
+- Software projects (contain code, package.json, build configs)
+- Installed applications (contain .exe, .dll, binary assets)
 - System caches or hidden metadata folders (e.g., .thumbnails, .cache, .git)
-- Device backups or OS images
+
+CRITICAL RULES:
+- A folder containing mostly user documents (PDFs, Word docs, Excel, media, loose files) is NEVER a cohesive entity.
+- If it looks like a user's personal organization folder, return false.
+- Do NOT flag device backups as entities unless they are raw disk images.
 
 Example 1:
 Directory Name: ".thumbnails"

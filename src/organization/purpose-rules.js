@@ -128,6 +128,16 @@ export function inferPurposeDetails({ absolutePath = "", baseName = "", extensio
     };
   }
 
+  // Specific Deep Content Rule: Bank Statement
+  if (normalizedBaseName.includes("statement") || /account\s*statement/i.test(extractedText) || /bank\s*statement/i.test(extractedText) || (/account\s*summary/i.test(extractedText) && /balance/i.test(extractedText))) {
+     return {
+       purpose: "finance",
+       expectedFolders: ["Finance/Bank_Statements"],
+       matchedByRule: true,
+       renameLabel: "Bank_Statement"
+     };
+  }
+
   // Specific Deep Content Rule: Aadhaar Card
   if (normalizedBaseName.includes("aadhaar") || /unique identification authority of india/i.test(extractedText) || (/government of india/i.test(extractedText) && /aadhaar/i.test(extractedText))) {
      return {

@@ -187,12 +187,20 @@ Give me ONLY a raw JSON string like {"exclusions": ["folder1"], "reasoning": "wh
   // Step 5: AI Renaming reasoning
   app.post("/api/ai/rename", async (req, res) => {
     try {
-      const { fileInfo } = req.body;
-      const prompt = `I have a file with info ${JSON.stringify(fileInfo)}. Propose a rename and give reasoning.
-Ensure names are deterministic (e.g., lowercase, underscores).
-If it's a Finance/Form_16, ensure the year is prominent.
-Return ONLY a raw JSON string like {"proposedName": "file.pdf", "reasoning": "why"}. No markdown.`;
-      const aiResponse = await askAI(prompt, "You are a highly deterministic file renaming assistant. You must follow standard naming conventions and prioritize semantic clarity based on file content and metadata.");
+      const { fileInfo, subjectPath } = req.body;
+      const file = catalog.getFileByPath(subjectPath);
+      const textSample = file?.extractedText ? file.extractedText.slice(0, 800) : "No text available.";
+      
+      const prompt = `I have a file named "${fileInfo.currentName}" with category "${fileInfo.category}" and purpose "${fileInfo.purpose}".
+Here is a sample of its extracted text content:
+---
+${textSample}
+---
+Analyze the text to determine exactly what this file is (e.g. Bank Statement, Aadhaar Card, Offer Letter, etc.) and who it belongs to if applicable.
+Propose a highly descriptive and structured file name. Use Spaces, Title Case, and clear descriptors (e.g., "Pratik Vaibhav - Aadhaar Card.pdf" or "HDFC Bank Statement - Jan 2024.pdf").
+Do not just return the original name or "document_123.pdf".
+Return ONLY a raw JSON string like {"proposedName": "New Name.pdf", "reasoning": "why"}. No markdown.`;
+      const aiResponse = await askAI(prompt, "You are a highly intelligent file renaming assistant. You must analyze the text content to extract the semantic meaning of the document and propose a human-readable, descriptive name.");
       const clean = cleanJSON(aiResponse);
       res.json(JSON.parse(clean));
     } catch (error) {

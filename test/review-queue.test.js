@@ -18,8 +18,8 @@ test("buildOrganizationProposals creates approval-gated move and rename proposal
       category: "document"
     },
     structure: {
-      purpose: "document",
-      expectedFolders: ["Documents"],
+      purpose: "finance",
+      expectedFolders: ["Finance"],
       moveRecommended: true,
       renameRecommended: true,
       reasons: [
@@ -39,13 +39,13 @@ test("buildOrganizationProposals creates approval-gated move and rename proposal
   assert.ok(move);
   assert.equal(move.status, "pending_user_approval");
   assert.equal(move.approvalGate, "moving files in batch");
-  assert.equal(move.evidence.proposedRelativePath, "Documents/file123.pdf");
+  assert.equal(move.evidence.proposedRelativePath, "Finance/file123.pdf");
 
   const rename = proposals.find((proposal) => proposal.action === "rename_file");
   assert.ok(rename);
   assert.equal(rename.status, "pending_user_approval");
   assert.equal(rename.approvalGate, "renaming files");
-  assert.equal(rename.proposedName, "Document_abcdef12.pdf");
+  assert.equal(rename.proposedName, "Finance_Record_file123.pdf");
   assert.equal(rename.evidence.sha256, "abcdef1234567890");
 });
 
