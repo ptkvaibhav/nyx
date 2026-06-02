@@ -90,5 +90,5 @@ Important folder candidates once structure exists:
 
   const unstructuredGeneric = audit.unstructuredFiles.find((file) => file.relativePath === "file123.pdf");
   assert.ok(unstructuredGeneric);
-  assert.equal(unstructuredGeneric.renameRecommended, false);
+  assert.equal(unstructuredGeneric.renameRecommended, true);
 });

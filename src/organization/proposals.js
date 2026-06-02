@@ -117,25 +117,29 @@ function proposeFileName(file) {
   const extension = file.extension ?? path.extname(file.absolutePath);
   const currentBaseName = path.basename(file.absolutePath, extension);
   
-  // If the current name is just a huge string of numbers (like 400082092134) or a generic IMG_ tag,
-  // we should prepend the semantic label so the user knows what it is (e.g. Document_400082092134.pdf)
-  // But wait, the user said "suggest the name of the file instead of just document_original name. Example - Say an ID card document like Aadhar card is named as 40130202.pdf, it should reason that this is an Aadhar Card and based on that suggest that it should be named as Pratik Vaibhav_Aadhar Card.pdf".
-  // Because we do not run deep AI extracting on *every* file automatically (it takes 10s per file), 
-  // we will give it a better default name but encourage the "Ask AI" button.
-  // Actually, for Identity documents, we can extract the specific type if the rule matched!
-  
-  // If the name is already prefixed with the label, don't double prefix
   if (currentBaseName.toLowerCase().startsWith(label.toLowerCase())) {
      return `${currentBaseName}${extension}`;
   }
 
-  // If the purpose is explicitly identified (like Identity, Finance, Resume), prefix it for clarity
   if (purpose !== "other" && purpose !== "image" && purpose !== "document") {
-     return `${label}_${currentBaseName}${extension}`;
+     const isGarbageName = /^(document|scan|img|whatsapp|signal|screenshot|untitled|\d+)[_\s\-]*\d*$/i.test(currentBaseName) || currentBaseName.length > 25;
+     
+     let extractedName = "";
+     if (file.extractedText) {
+        // Try to find a human name in the text
+        const nameMatch = file.extractedText.match(/(?:Name|Employee|Customer|Account|Mr\.|Mrs\.|Ms\.)[\s:]*([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2})/);
+        if (nameMatch && nameMatch[1].length > 3) {
+          extractedName = nameMatch[1].trim() + "_";
+        }
+     }
+
+     if (isGarbageName) {
+       return `${extractedName}${label}${extension}`.replace(/\s+/g, '_');
+     }
+     
+     return `${extractedName}${label}_${currentBaseName}${extension}`.replace(/\s+/g, '_');
   }
 
-  // For generic images or documents, just use the original name, don't force a "Document_" prefix
-  // unless it's literally just a hash. But let's just default to the original name to avoid annoying users.
   return `${currentBaseName}${extension}`;
 }
 

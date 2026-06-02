@@ -3,7 +3,7 @@ import { classifyFile } from "../core/classify.js";
 import { inferPurposeDetails } from "./purpose-rules.js";
 
 const GENERIC_NAME_PATTERNS = [
-  /^(file|document|scan|copy|duplicate|new|untitled)[-_ ]?\d*$/i,
+  /^(file|document|scan|copy|duplicate|new|untitled)[-_ ]?[a-z0-9]*$/i,
   /^(img|image|photo|vid|video|media|whatsapp|screenshot)[-_ ]?[a-z0-9-_() ]+$/i,
   /^\d{8,}$/, // long numeric strings
   /^[a-f0-9]{16,}$/i // long hex hashes

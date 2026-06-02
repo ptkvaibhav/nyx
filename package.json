@@ -26,6 +26,7 @@
     "node": ">=22"
   },
   "scripts": {
+    "start": "node src/cli.js",
     "plan": "node src/cli.js plan",
     "doctor": "node src/cli.js doctor",
     "demo": "node src/cli.js demo",

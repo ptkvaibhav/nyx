@@ -518,14 +518,20 @@ function App() {
                       </div>
                       <div>
                         <div className="text-xs font-bold text-green-500 uppercase tracking-widest mb-3 flex items-center gap-2"><CheckCircle className="w-4 h-4"/> Keep Original</div>
-                        <div className="p-5 bg-green-500/5 border border-green-500/20 rounded-xl text-sm font-mono truncate shadow-inner" title={item.evidence.proposedKeepPath || item.evidence.keptPath}>
+                        <div className="p-5 bg-green-500/5 border border-green-500/20 rounded-xl text-sm font-mono whitespace-normal break-all shadow-inner relative pr-10" title={item.evidence.proposedKeepPath || item.evidence.keptPath}>
                           {(item.evidence.proposedKeepPath || item.evidence.keptPath)?.split('\\').pop()}
+                          <a href={`/api/file?path=${encodeURIComponent(item.evidence.proposedKeepPath || item.evidence.keptPath)}`} target="_blank" rel="noreferrer" className="absolute right-3 top-1/2 -translate-y-1/2 text-sky-400 hover:text-sky-300 transition-colors" title="View Keep File">
+                             <Eye className="w-5 h-5" />
+                          </a>
                         </div>
                       </div>
                       <div>
                         <div className="text-xs font-bold text-rose-500 uppercase tracking-widest mb-3 flex items-center gap-2"><Trash2 className="w-4 h-4"/> Delete Duplicate</div>
-                        <div className="p-5 bg-rose-500/5 border border-rose-500/20 rounded-xl text-sm font-mono truncate opacity-60 line-through decoration-rose-500/50 shadow-inner" title={item.evidence.proposedDeletePaths?.[0] || item.evidence.deletedPaths?.[0]}>
+                        <div className="p-5 bg-rose-500/5 border border-rose-500/20 rounded-xl text-sm font-mono whitespace-normal break-all opacity-60 line-through decoration-rose-500/50 shadow-inner relative pr-10" title={item.evidence.proposedDeletePaths?.[0] || item.evidence.deletedPaths?.[0]}>
                           {(item.evidence.proposedDeletePaths?.[0] || item.evidence.deletedPaths?.[0])?.split('\\').pop()}
+                          <a href={`/api/file?path=${encodeURIComponent(item.evidence.proposedDeletePaths?.[0] || item.evidence.deletedPaths?.[0] || '')}`} target="_blank" rel="noreferrer" className="absolute right-3 top-1/2 -translate-y-1/2 text-sky-400 hover:text-sky-300 transition-colors opacity-100" title="View Duplicate File">
+                             <Eye className="w-5 h-5" />
+                          </a>
                         </div>
                       </div>
                    </div>
@@ -582,11 +588,11 @@ function App() {
                           {item.action.replace('_', ' ')}
                         </span>
                       </td>
-                      <td className="px-6 py-5 pr-8 truncate">
+                      <td className="px-6 py-5 pr-8">
                         <div className="flex flex-col gap-3 mb-4">
                           <div className="flex items-center gap-3 text-slate-500 line-through decoration-rose-500/50 overflow-hidden">
                             <div className="p-2 bg-slate-950 rounded border border-slate-800 shrink-0"><FileMinus className="w-4 h-4 text-rose-400"/></div>
-                            <span className="text-xs font-mono truncate w-full" title={item.subjectPath}>{item.subjectPath}</span>
+                            <span className="text-xs font-mono whitespace-normal break-all w-full" title={item.subjectPath}>{item.subjectPath}</span>
                             <a href={`/api/file?path=${encodeURIComponent(item.subjectPath)}`} target="_blank" rel="noreferrer" className="text-sky-400 hover:text-sky-300 transition-colors ml-auto shrink-0" title="View File">
                               <Eye className="w-4 h-4" />
                             </a>
@@ -610,7 +616,7 @@ function App() {
                               </div>
                             ) : (
                               <>
-                                <span className="text-sm font-bold text-sky-400 truncate w-full" title={item.proposedPath || item.evidence?.proposedName}>
+                                <span className="text-sm font-bold text-sky-400 whitespace-normal break-all w-full" title={item.proposedPath || item.evidence?.proposedName}>
                                   {item.proposedPath || item.evidence?.proposedName}
                                 </span>
                                 <button 
