@@ -175,6 +175,48 @@ export async function startServer({ port = 3030, dbPath = DEFAULT_DB_PATH } = {}
     });
   });
 
+  app.get("/api/browse-directory", async (req, res) => {
+    try {
+      const dirPath = req.query.path || "";
+      const managedRoots = await getManagedRoots();
+      
+      let targetPath;
+      if (!dirPath) {
+        // Return managed roots list
+        return res.json({
+          currentPath: "",
+          isRoot: true,
+          entries: managedRoots.map(root => ({
+            name: path.basename(root) || root,
+            path: root.replaceAll("\\", "/"),
+            isDirectory: true
+          }))
+        });
+      } else {
+        targetPath = await getSafePath(dirPath, managedRoots);
+      }
+      
+      const fs = await import("node:fs/promises");
+      const files = await fs.readdir(targetPath, { withFileTypes: true });
+      const entries = files
+        .filter(f => f.isDirectory() && !f.name.startsWith("."))
+        .map(f => ({
+          name: f.name,
+          path: path.join(targetPath, f.name).replaceAll("\\", "/"),
+          isDirectory: true
+        }));
+        
+      res.json({
+        currentPath: targetPath.replaceAll("\\", "/"),
+        parentPath: path.dirname(targetPath).replaceAll("\\", "/"),
+        isRoot: managedRoots.some(r => r.replaceAll("\\", "/").toLowerCase() === targetPath.replaceAll("\\", "/").toLowerCase()),
+        entries
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   app.get("/api/open-file", async (req, res) => {
     try {
       const filePath = req.query.path;
@@ -243,19 +285,30 @@ Give me ONLY a raw JSON string like {"exclusions": ["folder1"], "reasoning": "wh
   app.post("/api/ai/rename", async (req, res) => {
     try {
       const { fileInfo, subjectPath } = req.body;
-      const file = catalog.getFileByPath(subjectPath);
-      const textSample = file?.extractedText ? file.extractedText.slice(0, 800) : "No text available.";
+      const file = subjectPath ? catalog.getFileByPath(subjectPath) : null;
+      const textSample = file?.extractedText ? file.extractedText.slice(0, 1000) : "No text available.";
       
-      const prompt = `I have a file named "${fileInfo.currentName}" with category "${fileInfo.category}" and purpose "${fileInfo.purpose}".
+      const fileRelativePath = file?.relativePath || subjectPath || fileInfo.currentName;
+
+      const prompt = file?.extractedText && file.extractedText.length > 50
+        ? `I have a file named "${fileInfo.currentName}" with category "${fileInfo.category}" and purpose "${fileInfo.purpose}".
+It is located at: "${fileRelativePath}"
 Here is a sample of its extracted text content:
 ---
 ${textSample}
 ---
-Analyze the text to determine exactly what this file is (e.g. Bank Statement, Aadhaar Card, Offer Letter, etc.) and who it belongs to if applicable.
+Analyze the text, file name, and path to determine exactly what this file is (e.g. Bank Statement, Aadhaar Card, Offer Letter, etc.) and who it belongs to if applicable.
 Propose a highly descriptive and structured file name. Use Spaces, Title Case, and clear descriptors (e.g., "Pratik Vaibhav - Aadhaar Card.pdf" or "HDFC Bank Statement - Jan 2024.pdf").
-Do not just return the original name or "document_123.pdf".
+Do not include the extension in the proposed name unless you match the original one.
+Return ONLY a raw JSON string like {"proposedName": "New Name.pdf", "reasoning": "why"}. No markdown.`
+        : `I have a file named "${fileInfo.currentName}" with category "${fileInfo.category}" and purpose "${fileInfo.purpose}".
+It is located at: "${fileRelativePath}"
+Analyze the file name, extension, and parent folder path to determine exactly what this file is.
+Propose a highly descriptive and structured file name. Use Spaces, Title Case, and clear descriptors.
+Do not include the extension in the proposed name unless you match the original one.
 Return ONLY a raw JSON string like {"proposedName": "New Name.pdf", "reasoning": "why"}. No markdown.`;
-      const aiResponse = await askAI(prompt, "You are a highly intelligent file renaming assistant. You must analyze the text content to extract the semantic meaning of the document and propose a human-readable, descriptive name.");
+
+      const aiResponse = await askAI(prompt, "You are a highly intelligent file renaming assistant. You must analyze the text content and path context to extract the semantic meaning of the document and propose a human-readable, descriptive name.");
       const clean = cleanJSON(aiResponse);
       res.json(JSON.parse(clean));
     } catch (error) {

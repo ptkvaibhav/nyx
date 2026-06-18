@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Layout, Copy, Wand2, CheckCircle, ArrowRight, RefreshCw, FolderSearch, Cloud, Sparkles, KeyRound, Trash2, Info, FileMinus, FilePlus, FolderOpen, Eye, Edit2, Check, X } from 'lucide-react';
+import { Layout, Copy, Wand2, CheckCircle, ArrowRight, RefreshCw, FolderSearch, Cloud, Sparkles, KeyRound, Trash2, Info, FileMinus, FilePlus, FolderOpen, Eye, Edit2, Check, X, Folder, ArrowUpLeft } from 'lucide-react';
 
 interface Stats {
   totalFiles: number;
@@ -54,6 +54,35 @@ function App() {
 
   const [aiExclusions, setAiExclusions] = useState<{ exclusions: string[], reasoning: string } | null>(null);
   const [aiReasoning, setAiReasoning] = useState<Record<string, string>>({});
+  const [selectedDuplicates, setSelectedDuplicates] = useState<string[]>([]);
+  const [browsePath, setBrowsePath] = useState<string>("");
+  const [browseEntries, setBrowseEntries] = useState<{ name: string; path: string; isDirectory: boolean }[]>([]);
+  const [isBrowseRoot, setIsBrowseRoot] = useState(true);
+  const [showPickerModal, setShowPickerModal] = useState(false);
+
+  const fetchDirectoryListing = async (pathStr: string) => {
+    try {
+      const res = await fetch(`/api/browse-directory?path=${encodeURIComponent(pathStr)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setBrowsePath(data.currentPath);
+        setBrowseEntries(data.entries || []);
+        setIsBrowseRoot(data.isRoot);
+      }
+    } catch (e) {
+      console.error("Failed to browse directory", e);
+    }
+  };
+
+  const openDirectoryPicker = () => {
+    fetchDirectoryListing("");
+    setShowPickerModal(true);
+  };
+
+  const selectBrowsedDirectory = (selectedPath: string) => {
+    setDirectory(selectedPath);
+    setShowPickerModal(false);
+  };
 
   const openFileLocally = async (filePath: string | undefined) => {
     if (!filePath) return;
@@ -144,16 +173,7 @@ function App() {
     }
   }, [step]);
 
-  const triggerBackendPicker = () => {
-    const selected = window.prompt(
-      'Enter an approved local directory path.',
-      directory || health?.managedRoots?.[0] || ''
-    );
 
-    if (selected?.trim()) {
-      setDirectory(selected.trim());
-    }
-  };
 
   const startScan = async (currentSkipped = skippedPasswordFiles) => {
     if (!directory.trim()) {
@@ -229,6 +249,30 @@ function App() {
   const rejectItem = async (id: string) => {
     await fetch(`/api/items/${encodeURIComponent(id)}/reject`, { method: 'POST' });
     fetchData();
+  };
+
+  const handleBulkApprove = async () => {
+    try {
+      await Promise.all(selectedDuplicates.map(id => 
+        fetch(`/api/items/${encodeURIComponent(id)}/approve`, { method: 'POST' })
+      ));
+      setSelectedDuplicates([]);
+      fetchData();
+    } catch (e) {
+      console.error("Bulk approve failed", e);
+    }
+  };
+
+  const handleBulkReject = async () => {
+    try {
+      await Promise.all(selectedDuplicates.map(id => 
+        fetch(`/api/items/${encodeURIComponent(id)}/reject`, { method: 'POST' })
+      ));
+      setSelectedDuplicates([]);
+      fetchData();
+    } catch (e) {
+      console.error("Bulk reject failed", e);
+    }
   };
 
   const handleSaveEdit = async (id: string) => {
@@ -395,7 +439,7 @@ function App() {
                   placeholder="C:\Path\To\Your\Files"
                 />
                 <button 
-                  onClick={triggerBackendPicker}
+                  onClick={openDirectoryPicker}
                   className="bg-slate-800 hover:bg-slate-700 border border-slate-700 px-5 py-3 rounded-xl font-semibold transition-all flex items-center gap-2"
                 >
                   <FolderOpen className="w-4 h-4" /> Browse
@@ -590,11 +634,65 @@ function App() {
               </button>
             </header>
 
+            {items.filter(i => i.action === 'review_duplicate_deletion').length > 0 && (
+              <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl flex justify-between items-center gap-4 shadow-md mt-4 shrink-0">
+                <div className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    checked={
+                      selectedDuplicates.length > 0 &&
+                      selectedDuplicates.length === items.filter(i => i.action === 'review_duplicate_deletion').length
+                    }
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        const allIds = items.filter(i => i.action === 'review_duplicate_deletion').map(i => i.id);
+                        setSelectedDuplicates(allIds);
+                      } else {
+                        setSelectedDuplicates([]);
+                      }
+                    }}
+                    className="w-4 h-4 rounded border-slate-700 text-sky-500 focus:ring-sky-500 cursor-pointer"
+                  />
+                  <span className="text-sm font-semibold text-slate-300">
+                    Select All ({selectedDuplicates.length} of {items.filter(i => i.action === 'review_duplicate_deletion').length} selected)
+                  </span>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    disabled={selectedDuplicates.length === 0}
+                    onClick={handleBulkReject}
+                    className="px-4 py-2 rounded-lg text-sm font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-500/20 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                  >
+                    Reject Selected
+                  </button>
+                  <button
+                    disabled={selectedDuplicates.length === 0}
+                    onClick={handleBulkApprove}
+                    className="px-4 py-2 rounded-lg text-sm font-bold bg-green-500/10 text-green-400 border border-green-500/20 hover:bg-green-500/20 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                  >
+                    Approve Selected Deletions
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="flex flex-col gap-6 mt-4">
               {items.filter(i => i.action === 'review_duplicate_deletion').map(item => (
                 <div key={item.id} className="bg-slate-900/80 border border-slate-800 rounded-2xl overflow-hidden shadow-lg">
                    <div className="bg-slate-800/40 px-6 py-4 border-b border-slate-800 flex justify-between items-center">
                       <div className="flex items-center gap-3">
+                        <input 
+                          type="checkbox"
+                          checked={selectedDuplicates.includes(item.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedDuplicates([...selectedDuplicates, item.id]);
+                            } else {
+                              setSelectedDuplicates(selectedDuplicates.filter(id => id !== item.id));
+                            }
+                          }}
+                          className="w-4 h-4 rounded border-slate-700 text-sky-500 focus:ring-sky-500 cursor-pointer mr-1"
+                        />
                         <Copy className="w-4 h-4 text-slate-500" />
                         <span className="text-sm font-mono text-slate-400">SHA256: {item.evidence.sha256.slice(0, 16)}...</span>
                         <button onClick={() => openFileLocally(item.subjectPath)} className="text-sky-400 hover:text-sky-300 transition-colors ml-2" title="Open File Natively">
@@ -865,6 +963,101 @@ function App() {
           </div>
         )}
       </main>
+
+      {showPickerModal && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-2xl w-full max-h-[80vh] flex flex-col shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+            <header className="p-6 border-b border-slate-800 flex justify-between items-center shrink-0">
+              <div>
+                <h2 className="text-xl font-bold flex items-center gap-2 text-white"><Folder className="w-5 h-5 text-sky-400" /> Select Managed Directory</h2>
+                <p className="text-xs text-slate-400 mt-1">Navigate to any directory. Double-click a folder to enter.</p>
+              </div>
+              <button 
+                onClick={() => setShowPickerModal(false)}
+                className="text-slate-400 hover:text-white p-1 hover:bg-slate-800 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </header>
+
+            <div className="p-4 bg-slate-950/60 border-b border-slate-800 flex items-center gap-2 text-xs font-mono text-slate-400 shrink-0 overflow-x-auto whitespace-nowrap">
+              <span className="text-slate-500 uppercase tracking-widest font-bold font-sans text-[10px]">Path:</span>
+              <span className="text-sky-400">{browsePath || "Roots Listing"}</span>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-1 min-h-[300px]">
+              {/* Back navigation */}
+              {!isBrowseRoot && (
+                <button
+                  onClick={async () => {
+                    const parts = browsePath.split('/');
+                    parts.pop();
+                    const parent = parts.join('/');
+                    await fetchDirectoryListing(parent);
+                  }}
+                  className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-800/50 text-left text-sm text-sky-400 transition-colors font-semibold"
+                >
+                  <ArrowUpLeft className="w-4 h-4 shrink-0" /> .. (Go Up)
+                </button>
+              )}
+
+              {/* Browse listings */}
+              {browseEntries.map((entry) => (
+                <div 
+                  key={entry.path}
+                  onDoubleClick={async () => {
+                    await fetchDirectoryListing(entry.path);
+                  }}
+                  className="flex items-center justify-between px-4 py-2.5 rounded-xl hover:bg-slate-800/80 text-left text-sm text-slate-300 transition-colors group cursor-pointer"
+                >
+                  <span className="flex items-center gap-3 font-medium truncate">
+                    <Folder className="w-4 h-4 text-sky-400 shrink-0" />
+                    <span className="truncate">{entry.name}</span>
+                  </span>
+                  <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={async () => {
+                        await fetchDirectoryListing(entry.path);
+                      }}
+                      className="px-2.5 py-1 text-xs bg-slate-800 hover:bg-slate-700 text-sky-400 rounded-lg font-bold"
+                    >
+                      Open
+                    </button>
+                    <button
+                      onClick={() => selectBrowsedDirectory(entry.path)}
+                      className="px-2.5 py-1 text-xs bg-sky-600 hover:bg-sky-500 text-white rounded-lg font-bold"
+                    >
+                      Select
+                    </button>
+                  </div>
+                </div>
+              ))}
+
+              {browseEntries.length === 0 && (
+                <div className="text-center py-12 text-slate-500 text-sm">
+                  No subdirectories found here.
+                </div>
+              )}
+            </div>
+
+            <footer className="p-6 border-t border-slate-800 flex justify-end gap-3 shrink-0">
+              <button
+                onClick={() => setShowPickerModal(false)}
+                className="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-sm transition-all border border-slate-700"
+              >
+                Cancel
+              </button>
+              <button
+                disabled={!browsePath}
+                onClick={() => selectBrowsedDirectory(browsePath)}
+                className="px-6 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-sky-900/20"
+              >
+                Select Current Folder
+              </button>
+            </footer>
+          </div>
+        </div>
+      )}
 
       {/* Global CSS */}
       <style>{`

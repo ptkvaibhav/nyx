@@ -33,19 +33,26 @@ export async function initAI(mock = false) {
       throw new Error(`Ollama responded with status: ${response.status}`);
     }
     const data = await response.json();
-    const models = data.models.map(m => m.name);
+    const models = Array.isArray(data.models) ? data.models.map(m => m.name).filter(Boolean) : [];
+    
+    let modelFound = models.some((m) => m === OLLAMA_MODEL || m.includes(OLLAMA_MODEL));
+    if (!modelFound && models.length > 0) {
+      const fallbackModel = models[0];
+      console.warn(`Configured model '${OLLAMA_MODEL}' not found. Dynamically falling back to installed model: '${fallbackModel}'`);
+      OLLAMA_MODEL = fallbackModel;
+      modelFound = true;
+    }
+
     aiStatus = {
-      available: true,
+      available: models.length > 0,
       model: OLLAMA_MODEL,
-      reason: models.some((m) => m === OLLAMA_MODEL || m.includes(OLLAMA_MODEL))
-        ? "ready"
-        : "model_not_found",
+      reason: modelFound ? "ready" : "model_not_found",
       checkedAt: new Date().toISOString(),
       models
     };
     warnedUnavailable = false;
     
-    if (!models.some(m => m.includes("gemma")) && typeof process !== "undefined" && process.env.NODE_ENV !== "test") {
+    if (models.length > 0 && !models.some(m => m.includes("gemma")) && typeof process !== "undefined" && process.env.NODE_ENV !== "test") {
       console.warn("Warning: 'gemma' model not found in Ollama. Make sure to run `ollama run gemma`.");
     }
   } catch (error) {

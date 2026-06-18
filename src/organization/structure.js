@@ -3,10 +3,10 @@ import { classifyFile } from "../core/classify.js";
 import { inferPurposeDetails } from "./purpose-rules.js";
 
 const GENERIC_NAME_PATTERNS = [
-  /^(file|document|scan|copy|duplicate|new|untitled)[-_ ]?[a-z0-9]*$/i,
-  /^(img|image|photo|vid|video|media|whatsapp|screenshot)[-_ ]?[a-z0-9-_() ]+$/i,
-  /^\d{8,}$/, // long numeric strings
-  /^[a-f0-9]{16,}$/i // long hex hashes
+  /^(file|document|doc|docx|pdf|scan|copy|duplicate|new|untitled|temp|tmp|test|download)[-_ ]?[a-z0-9]*$/i,
+  /^(img|image|photo|pic|capture|vid|video|media|whatsapp|screenshot)[-_ ]?[a-z0-9-_() ]*$/i,
+  /^\d{4,8,}$/, // long numeric strings (like date or scan numbers)
+  /^[a-f0-9]{8,}$/i // hex hashes
 ];
 
 export function analyzeFileStructure(fileEntry) {
@@ -94,7 +94,7 @@ function buildReasons({ fileNameMatchesContent, folderMatchesContent, betterDest
 function shouldRecommendRename({ fileNameMatchesContent, nameLooksGeneric, purpose }) {
   if (nameLooksGeneric) return true;
   
-  if (!fileNameMatchesContent && purpose.purpose !== 'image' && purpose.purpose !== 'other') {
+  if (!fileNameMatchesContent) {
      return true;
   }
 
