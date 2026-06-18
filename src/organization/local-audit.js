@@ -21,7 +21,9 @@ export async function buildLocalAudit({
   skippedFiles = []
 } = {}) {
   // If targetDirectory is provided, we use that. Otherwise fallback to engagement.md parsing.
-  let managedDirectories = targetDirectory ? [targetDirectory] : [];
+  let managedDirectories = targetDirectory 
+    ? (Array.isArray(targetDirectory) ? targetDirectory : [targetDirectory]) 
+    : [];
   let exclusions = [".git", "node_modules", "Temp", "packages", "Drive", ".nyx"];
   let engagement = null;
   

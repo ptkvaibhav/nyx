@@ -15,26 +15,42 @@ export async function scanManagedDirectories({ managedDirectories, exclusions = 
     const rootPath = path.resolve(managedDirectory);
 
     try {
-      const rootFiles = [];
-      const rootDirs = [];
-      await walkDirectory({
-        rootPath,
-        currentPath: rootPath,
-        exclusions: normalizedExclusions,
-        files: rootFiles,
-        directories: rootDirs,
-        onDiscovery: (p) => {
-           discoveryCount++;
-           if (onDiscovery) onDiscovery(discoveryCount, p);
-        }
-      });
+      const s = await stat(rootPath);
+      if (s.isFile()) {
+        files.push({
+          rootPath: path.dirname(rootPath),
+          absolutePath: rootPath,
+          relativePath: path.basename(rootPath),
+          modifiedAt: s.mtime.toISOString(),
+          sizeBytes: s.size,
+          isEntity: false
+        });
+        roots.push({
+          rootPath,
+          fileCount: 1
+        });
+      } else {
+        const rootFiles = [];
+        const rootDirs = [];
+        await walkDirectory({
+          rootPath,
+          currentPath: rootPath,
+          exclusions: normalizedExclusions,
+          files: rootFiles,
+          directories: rootDirs,
+          onDiscovery: (p) => {
+             discoveryCount++;
+             if (onDiscovery) onDiscovery(discoveryCount, p);
+          }
+        });
 
-      files.push(...rootFiles);
-      directories.push(...rootDirs);
-      roots.push({
-        rootPath,
-        fileCount: rootFiles.length
-      });
+        files.push(...rootFiles);
+        directories.push(...rootDirs);
+        roots.push({
+          rootPath,
+          fileCount: rootFiles.length
+        });
+      }
     } catch (error) {
       if (isMissingPathError(error)) {
         missingDirectories.push(rootPath);

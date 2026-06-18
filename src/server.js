@@ -91,13 +91,22 @@ export async function startServer({ port = 3030, dbPath = DEFAULT_DB_PATH } = {}
     const { directory, skippedFiles } = req.body;
     if (!directory) return res.status(400).json({ error: "Directory path required" });
 
-    let managedRoots;
+    // Parse target paths: can be single string, array, or comma-separated string
+    const inputPaths = Array.isArray(directory)
+      ? directory
+      : typeof directory === "string"
+        ? directory.split(",").map(p => p.trim()).filter(Boolean)
+        : [];
+
+    if (inputPaths.length === 0) {
+      return res.status(400).json({ error: "No valid directory or file paths provided" });
+    }
+
+    let resolvedPaths;
     try {
-      managedRoots = await getManagedRoots();
-      const resolvedDir = await getSafePath(directory, managedRoots);
-      assertInsideManagedRoots(resolvedDir, managedRoots);
+      resolvedPaths = await Promise.all(inputPaths.map(p => getSafePath(p)));
     } catch (error) {
-      return res.status(403).json({ error: error.message });
+      return res.status(400).json({ error: `Path resolution failed: ${error.message}` });
     }
 
     // Prevent multiple concurrent scans for now
@@ -113,7 +122,7 @@ export async function startServer({ port = 3030, dbPath = DEFAULT_DB_PATH } = {}
       try {
         const audit = await buildLocalAudit({ 
           dbPath,
-          targetDirectory: directory,
+          targetDirectory: resolvedPaths, // Pass array of resolved target paths
           skippedFiles: skippedFiles || [],
           isCancelled: () => scanCancelled,
           onDiscovery: (count, path) => {
@@ -202,37 +211,79 @@ export async function startServer({ port = 3030, dbPath = DEFAULT_DB_PATH } = {}
     try {
       const dirPath = req.query.path || "";
       const managedRoots = await getManagedRoots();
-      
-      let targetPath;
+      const fs = await import("node:fs/promises");
+      const os = await import("node:os");
+
       if (!dirPath) {
-        // Return managed roots list
+        // Return drives, home folder, and managed roots as shortcuts
+        const homedir = os.homedir().replaceAll("\\", "/");
+        const drives = ["C:", "D:", "E:", "F:"];
+        const availableDrives = [];
+        
+        for (const drive of drives) {
+          try {
+            await access(`${drive}/`, constants.F_OK);
+            availableDrives.push(`${drive}/`);
+          } catch {}
+        }
+
+        const entries = [];
+        
+        // Add Managed Roots
+        for (const root of managedRoots) {
+          entries.push({
+            name: `⭐ Approved Root: ${path.basename(root) || root}`,
+            path: root.replaceAll("\\", "/"),
+            isDirectory: true
+          });
+        }
+
+        // Add Home folder
+        entries.push({
+          name: `🏠 Home (${homedir})`,
+          path: homedir,
+          isDirectory: true
+        });
+
+        // Add Drives
+        for (const drive of availableDrives) {
+          entries.push({
+            name: `💾 Drive (${drive})`,
+            path: drive,
+            isDirectory: true
+          });
+        }
+
         return res.json({
           currentPath: "",
           isRoot: true,
-          entries: managedRoots.map(root => ({
-            name: path.basename(root) || root,
-            path: root.replaceAll("\\", "/"),
-            isDirectory: true
-          }))
+          entries
         });
-      } else {
-        targetPath = await getSafePath(dirPath, managedRoots);
       }
-      
-      const fs = await import("node:fs/promises");
+
+      const targetPath = await getSafePath(dirPath);
       const files = await fs.readdir(targetPath, { withFileTypes: true });
+      
       const entries = files
-        .filter(f => f.isDirectory() && !f.name.startsWith("."))
+        .filter(f => !f.name.startsWith("."))
         .map(f => ({
           name: f.name,
           path: path.join(targetPath, f.name).replaceAll("\\", "/"),
-          isDirectory: true
-        }));
-        
+          isDirectory: f.isDirectory()
+        }))
+        .sort((a, b) => {
+          if (a.isDirectory && !b.isDirectory) return -1;
+          if (!a.isDirectory && b.isDirectory) return 1;
+          return a.name.localeCompare(b.name);
+        });
+
+      const parentDir = path.dirname(targetPath);
+      const isDriveRoot = targetPath === parentDir || targetPath.endsWith(":/") || targetPath.endsWith(":/");
+
       res.json({
         currentPath: targetPath.replaceAll("\\", "/"),
-        parentPath: path.dirname(targetPath).replaceAll("\\", "/"),
-        isRoot: managedRoots.some(r => r.replaceAll("\\", "/").toLowerCase() === targetPath.replaceAll("\\", "/").toLowerCase()),
+        parentPath: isDriveRoot ? "" : parentDir.replaceAll("\\", "/"),
+        isRoot: isDriveRoot,
         entries
       });
     } catch (error) {
@@ -466,14 +517,12 @@ function assertInsideManagedRoots(targetPath, managedRoots) {
   }
 }
 
-async function getSafePath(filePath, managedRoots) {
+async function getSafePath(filePath) {
   let resolvedPath = path.resolve(filePath);
   try {
     resolvedPath = await realpath(resolvedPath);
   } catch {
     // If file doesn't exist, realpath throws. We fallback to path.resolve.
   }
-  
-  assertInsideManagedRoots(resolvedPath, managedRoots);
   return resolvedPath;
 }

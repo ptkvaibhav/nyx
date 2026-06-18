@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Layout, Copy, Wand2, CheckCircle, ArrowRight, RefreshCw, FolderSearch, Cloud, Sparkles, KeyRound, Trash2, Info, FileMinus, FilePlus, FolderOpen, Eye, Edit2, Check, X, Folder, ArrowUpLeft } from 'lucide-react';
+import { Layout, Copy, Wand2, CheckCircle, ArrowRight, RefreshCw, FolderSearch, Cloud, Sparkles, KeyRound, Trash2, Info, FileMinus, FilePlus, FolderOpen, Eye, Edit2, Check, X, Folder, ArrowUpLeft, File } from 'lucide-react';
 
 interface Stats {
   totalFiles: number;
@@ -60,6 +60,7 @@ function App() {
   const [browseEntries, setBrowseEntries] = useState<{ name: string; path: string; isDirectory: boolean }[]>([]);
   const [isBrowseRoot, setIsBrowseRoot] = useState(true);
   const [showPickerModal, setShowPickerModal] = useState(false);
+  const [selectedPaths, setSelectedPaths] = useState<string[]>([]);
 
   const fetchDirectoryListing = async (pathStr: string) => {
     try {
@@ -76,12 +77,31 @@ function App() {
   };
 
   const openDirectoryPicker = () => {
+    // Populate selection paths from the current input string (split by comma)
+    const paths = directory
+      .split(",")
+      .map(p => p.trim())
+      .filter(Boolean);
+    setSelectedPaths(paths);
     fetchDirectoryListing("");
     setShowPickerModal(true);
   };
 
+  const togglePathSelection = (pathStr: string) => {
+    setSelectedPaths(prev =>
+      prev.includes(pathStr)
+        ? prev.filter(p => p !== pathStr)
+        : [...prev, pathStr]
+    );
+  };
+
   const selectBrowsedDirectory = (selectedPath: string) => {
     setDirectory(selectedPath);
+    setShowPickerModal(false);
+  };
+
+  const confirmSelection = () => {
+    setDirectory(selectedPaths.join(", "));
     setShowPickerModal(false);
   };
 
@@ -1009,8 +1029,8 @@ function App() {
           <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-2xl w-full max-h-[80vh] flex flex-col shadow-2xl animate-in fade-in zoom-in-95 duration-200">
             <header className="p-6 border-b border-slate-800 flex justify-between items-center shrink-0">
               <div>
-                <h2 className="text-xl font-bold flex items-center gap-2 text-white"><Folder className="w-5 h-5 text-sky-400" /> Select Managed Directory</h2>
-                <p className="text-xs text-slate-400 mt-1">Navigate to any directory. Double-click a folder to enter.</p>
+                <h2 className="text-xl font-bold flex items-center gap-2 text-white"><Folder className="w-5 h-5 text-sky-400" /> Select Files & Directories</h2>
+                <p className="text-xs text-slate-400 mt-1">Select multiple items to analyze. Double-click a folder to navigate inside.</p>
               </div>
               <button 
                 onClick={() => setShowPickerModal(false)}
@@ -1046,54 +1066,86 @@ function App() {
                 <div 
                   key={entry.path}
                   onDoubleClick={async () => {
-                    await fetchDirectoryListing(entry.path);
+                    if (entry.isDirectory) {
+                      await fetchDirectoryListing(entry.path);
+                    }
                   }}
-                  className="flex items-center justify-between px-4 py-2.5 rounded-xl hover:bg-slate-800/80 text-left text-sm text-slate-300 transition-colors group cursor-pointer"
+                  className="flex items-center justify-between px-4 py-2 rounded-xl hover:bg-slate-800/80 text-left text-sm text-slate-300 transition-colors group cursor-pointer"
                 >
-                  <span className="flex items-center gap-3 font-medium truncate">
-                    <Folder className="w-4 h-4 text-sky-400 shrink-0" />
-                    <span className="truncate">{entry.name}</span>
-                  </span>
-                  <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="flex items-center gap-3 truncate flex-1">
+                    <input 
+                      type="checkbox"
+                      checked={selectedPaths.includes(entry.path)}
+                      onChange={() => togglePathSelection(entry.path)}
+                      onClick={(e) => e.stopPropagation()}
+                      className="w-4 h-4 rounded border-slate-700 bg-slate-950 text-sky-600 focus:ring-sky-500 focus:ring-offset-slate-900 transition-colors cursor-pointer shrink-0"
+                    />
+                    <span 
+                      onClick={() => {
+                        if (entry.isDirectory) {
+                          fetchDirectoryListing(entry.path);
+                        } else {
+                          togglePathSelection(entry.path);
+                        }
+                      }}
+                      className="flex items-center gap-2.5 font-medium truncate flex-1 select-none"
+                    >
+                      {entry.isDirectory ? (
+                        <Folder className="w-4 h-4 text-sky-400 shrink-0" />
+                      ) : (
+                        <File className="w-4 h-4 text-slate-400 shrink-0" />
+                      )}
+                      <span className="truncate hover:text-white transition-colors">{entry.name}</span>
+                    </span>
+                  </div>
+                  
+                  {entry.isDirectory && (
                     <button
                       onClick={async () => {
                         await fetchDirectoryListing(entry.path);
                       }}
-                      className="px-2.5 py-1 text-xs bg-slate-800 hover:bg-slate-700 text-sky-400 rounded-lg font-bold"
+                      className="opacity-0 group-hover:opacity-100 transition-opacity px-2.5 py-1 text-xs bg-slate-850 hover:bg-slate-750 text-sky-400 rounded-lg font-semibold"
                     >
                       Open
                     </button>
-                    <button
-                      onClick={() => selectBrowsedDirectory(entry.path)}
-                      className="px-2.5 py-1 text-xs bg-sky-600 hover:bg-sky-500 text-white rounded-lg font-bold"
-                    >
-                      Select
-                    </button>
-                  </div>
+                  )}
                 </div>
               ))}
 
               {browseEntries.length === 0 && (
                 <div className="text-center py-12 text-slate-500 text-sm">
-                  No subdirectories found here.
+                  No folders or files found here.
                 </div>
               )}
             </div>
 
-            <footer className="p-6 border-t border-slate-800 flex justify-end gap-3 shrink-0">
-              <button
-                onClick={() => setShowPickerModal(false)}
-                className="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-sm transition-all border border-slate-700"
-              >
-                Cancel
-              </button>
-              <button
-                disabled={!browsePath}
-                onClick={() => selectBrowsedDirectory(browsePath)}
-                className="px-6 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-sky-900/20"
-              >
-                Select Current Folder
-              </button>
+            <footer className="p-6 border-t border-slate-800 flex items-center justify-between gap-3 shrink-0">
+              <div className="text-xs text-slate-400 font-medium">
+                {selectedPaths.length} item{selectedPaths.length === 1 ? '' : 's'} selected
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowPickerModal(false)}
+                  className="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-sm transition-all border border-slate-700"
+                >
+                  Cancel
+                </button>
+                {browsePath && (
+                  <button
+                    onClick={() => selectBrowsedDirectory(browsePath)}
+                    className="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-sm transition-all border border-slate-700"
+                  >
+                    Select Current Folder
+                  </button>
+                )}
+                <button
+                  disabled={selectedPaths.length === 0}
+                  onClick={confirmSelection}
+                  className="px-6 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-sky-900/20"
+                >
+                  Confirm Selection
+                </button>
+              </div>
             </footer>
           </div>
         </div>
