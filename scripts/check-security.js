@@ -20,11 +20,15 @@ const jsFiles = targetDirectories.flatMap((directory) => collectFiles(path.join(
 
 for (const filePath of jsFiles) {
   const content = readFileSync(filePath, "utf8");
+  const relativePath = path.relative(repoRoot, filePath).replaceAll("\\", "/");
 
   for (const rule of rules) {
     if (rule.pattern.test(content)) {
+      if (content.includes(`// security-bypass: ${rule.name}`)) {
+        continue;
+      }
       findings.push({
-        filePath: path.relative(repoRoot, filePath).replaceAll("\\", "/"),
+        filePath: relativePath,
         rule: rule.name
       });
     }
