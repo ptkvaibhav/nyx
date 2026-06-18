@@ -92,8 +92,6 @@ function buildReasons({ fileNameMatchesContent, folderMatchesContent, betterDest
 }
 
 function shouldRecommendRename({ fileNameMatchesContent, nameLooksGeneric, purpose }) {
-  // Recommend rename if the name is explicitly generic, OR if it doesn't match content rules
-  // and the purpose isn't just 'other' or 'image' (where renaming might not be super helpful without AI)
   if (nameLooksGeneric) return true;
   
   if (!fileNameMatchesContent && purpose.purpose !== 'image' && purpose.purpose !== 'other') {

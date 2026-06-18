@@ -1,5 +1,4 @@
-/* eslint-disable react-hooks/set-state-in-effect */
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { Layout, Copy, Wand2, CheckCircle, ArrowRight, RefreshCw, FolderSearch, Cloud, Sparkles, KeyRound, Trash2, Info, FileMinus, FilePlus, FolderOpen, Eye, Edit2, Check, X } from 'lucide-react';
 
 interface Stats {
@@ -23,9 +22,20 @@ interface ReviewItem {
   evidence: any;
 }
 
+interface Health {
+  ok: boolean;
+  ai: {
+    available: boolean;
+    model: string;
+    reason: string;
+  };
+  managedRoots: string[];
+}
+
 function App() {
   const [step, setStep] = useState<1 | 2 | 3 | 4 | 5 | 6 | 7>(1);
-  const [directory, setDirectory] = useState<string>('C:\\Users\\ptkva\\Documents\\nyx\\File');
+  const [directory, setDirectory] = useState<string>('');
+  const [health, setHealth] = useState<Health | null>(null);
   const [scanning, setScanning] = useState(false);
   const [needsPassword, setNeedsPassword] = useState(false);
   const [passwordFile, setPasswordFile] = useState("");
@@ -40,11 +50,23 @@ function App() {
   const [proposalFilter, setProposalFilter] = useState<'all' | 'move' | 'rename'>('all');
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState<string>("");
+  const [lastApplyResult, setLastApplyResult] = useState<{ applied?: unknown[]; errors?: { message: string }[] } | null>(null);
 
   const [aiExclusions, setAiExclusions] = useState<{ exclusions: string[], reasoning: string } | null>(null);
   const [aiReasoning, setAiReasoning] = useState<Record<string, string>>({});
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const openFileLocally = async (filePath: string | undefined) => {
+    if (!filePath) return;
+    try {
+      const res = await fetch(`/api/open-file?path=${encodeURIComponent(filePath)}`);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || 'File is outside the approved managed roots.');
+      }
+    } catch {
+      console.error("Failed to open file");
+    }
+  };
 
   const fetchData = async () => {
     try {
@@ -57,6 +79,19 @@ function App() {
       setItems(itemsData);
     } catch {
       console.error('Failed to fetch data');
+    }
+  };
+
+  const fetchHealth = async () => {
+    try {
+      const res = await fetch('/api/health');
+      const data = await res.json();
+      setHealth(data);
+      if (!directory && data.managedRoots?.[0]) {
+        setDirectory(data.managedRoots[0]);
+      }
+    } catch {
+      console.error('Failed to fetch health status');
     }
   };
 
@@ -97,41 +132,50 @@ function App() {
   }, [scanning, step]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchHealth().catch(console.error);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
     if (step > 1) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       fetchData().catch(console.error);
     }
   }, [step]);
 
-  const onFolderSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (files && files.length > 0) {
-      triggerBackendPicker();
-    }
-  };
+  const triggerBackendPicker = () => {
+    const selected = window.prompt(
+      'Enter an approved local directory path.',
+      directory || health?.managedRoots?.[0] || ''
+    );
 
-  const triggerBackendPicker = async () => {
-    try {
-      const res = await fetch('/api/select-directory');
-      const data = await res.json();
-      if (data.directory) {
-        setDirectory(data.directory);
-      }
-    } catch (e) {
-      console.error("Failed to pick directory", e);
+    if (selected?.trim()) {
+      setDirectory(selected.trim());
     }
   };
 
   const startScan = async (currentSkipped = skippedPasswordFiles) => {
+    if (!directory.trim()) {
+      alert('Enter an approved directory path before scanning.');
+      return;
+    }
+
     setScanning(true);
     setScanProgress({ current: 0, total: 0, file: "", status: "running", error: "" });
     setStep(2);
     try {
-      await fetch('/api/scan/start', {
+      const res = await fetch('/api/scan/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ directory, skippedFiles: currentSkipped })
       });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || 'Scan initiation failed');
+        setStep(1);
+        setScanning(false);
+      }
     } catch {
       alert('Scan initiation failed');
       setStep(1);
@@ -219,11 +263,15 @@ function App() {
       const res = await fetch('/api/ai/rename', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fileInfo: item.evidence })
+        body: JSON.stringify({ fileInfo: item.evidence, subjectPath: item.subjectPath })
       });
       const data = await res.json();
       
-      setAiReasoning(prev => ({ ...prev, [item.id]: data.reasoning }));
+      let explanation = data.reasoning;
+      if (data.error === "AI unavailable" || data.degraded) {
+        explanation = "Ollama is offline. Proposed name using deterministic category heuristics.";
+      }
+      setAiReasoning(prev => ({ ...prev, [item.id]: explanation || data.error || 'AI reasoning is unavailable.' }));
 
       // If the AI actually proposed a new name, update the local item state!
       if (data.proposedName && item.action === 'rename_file') {
@@ -244,10 +292,44 @@ function App() {
     }
   };
 
+  const cancelScan = async () => {
+    try {
+      await fetch('/api/scan/cancel', { method: 'POST' });
+      setScanning(false);
+      setStep(1);
+    } catch {
+      console.error("Failed to cancel scan");
+    }
+  };
+
+  const rollbackChanges = async () => {
+    if (!window.confirm("Are you sure you want to rollback all applied changes? This will move files back to their original locations.")) {
+      return;
+    }
+    try {
+      const res = await fetch('/api/rollback', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok || data.errors?.length) {
+        alert("Rollback completed with some errors.");
+      } else {
+        alert(`Successfully rolled back ${data.rolledBack?.length ?? 0} actions.`);
+      }
+      await fetchData();
+      setStep(1);
+    } catch {
+      alert("Failed to rollback changes");
+    }
+  };
+
   const applyChanges = async () => {
     setApplying(true);
     try {
-      await fetch('/api/apply', { method: 'POST' });
+      const res = await fetch('/api/apply', { method: 'POST' });
+      const data = await res.json();
+      setLastApplyResult(data);
+      if (!res.ok || data.errors?.length) {
+        alert(`Applied with ${data.errors?.length ?? 1} error(s). Review the summary before continuing.`);
+      }
       await fetchData();
       setStep(6);
     } catch {
@@ -255,11 +337,6 @@ function App() {
     } finally {
       setApplying(false);
     }
-  };
-
-  const formatSize = (bytes: number) => {
-    const gb = bytes / (1024 * 1024 * 1024);
-    return gb.toFixed(2) + ' GB';
   };
 
   const isFolderClean = stats && stats.pendingItems === 0;
@@ -304,7 +381,7 @@ function App() {
           <div className="max-w-2xl mx-auto mt-20 flex flex-col gap-6">
             <div className="text-center">
               <h1 className="text-4xl font-bold mb-4 tracking-tight">What would you like to organize?</h1>
-              <p className="text-slate-400 text-lg">Select a directory path to let Nyx AI scan and reason about your files.</p>
+              <p className="text-slate-400 text-lg">Enter an approved managed directory. Nyx will refuse paths outside the engagement scope.</p>
             </div>
             
             <div className="bg-slate-900/80 border border-slate-800 p-8 rounded-2xl shadow-xl backdrop-blur-sm mt-4">
@@ -323,15 +400,29 @@ function App() {
                 >
                   <FolderOpen className="w-4 h-4" /> Browse
                 </button>
-                
-                {/* Hidden uploader input for "web-like" feel if needed, but backend picker is better for absolute paths */}
-                <input 
-                  type="file" 
-                  ref={fileInputRef}
-                  style={{ display: 'none' }}
-                  {...({ webkitdirectory: "", directory: "" } as unknown as React.InputHTMLAttributes<HTMLInputElement>)} 
-                  onChange={onFolderSelect}
-                />
+              </div>
+
+              <div className="mt-4 grid gap-3">
+                <div className={`rounded-xl border px-4 py-3 text-sm ${health?.ai?.available ? 'border-green-500/20 bg-green-500/10 text-green-300' : 'border-amber-500/20 bg-amber-500/10 text-amber-300'}`}>
+                  AI status: {health?.ai?.available ? `Ready (${health.ai.model})` : `Deterministic mode${health?.ai?.reason ? ` - ${health.ai.reason}` : ''}`}
+                </div>
+
+                {health?.managedRoots?.length ? (
+                  <div className="rounded-xl border border-slate-800 bg-slate-950/70 px-4 py-3">
+                    <div className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-2">Approved Roots</div>
+                    <div className="flex flex-col gap-1">
+                      {health.managedRoots.map(root => (
+                        <button
+                          key={root}
+                          onClick={() => setDirectory(root)}
+                          className="text-left text-xs font-mono text-slate-400 hover:text-sky-400 transition-colors break-all"
+                        >
+                          {root}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
               </div>
               
               <button 
@@ -339,6 +430,13 @@ function App() {
                 className="w-full mt-6 bg-sky-600 hover:bg-sky-500 text-white py-4 rounded-xl font-bold transition-all shadow-lg shadow-sky-900/30 flex items-center justify-center gap-2"
               >
                 <Sparkles className="w-5 h-5" /> Analyze with AI
+              </button>
+              
+              <button 
+                onClick={rollbackChanges}
+                className="w-full mt-3 bg-slate-900 hover:bg-slate-800 text-slate-400 border border-slate-800 py-3 rounded-xl font-semibold transition-all flex items-center justify-center gap-2"
+              >
+                <RefreshCw className="w-4 h-4" /> Rollback Last Session
               </button>
             </div>
           </div>
@@ -408,11 +506,17 @@ function App() {
                         style={{ width: `${(scanProgress.current / scanProgress.total) * 100}%` }}
                       ></div>
                     </div>
-                    <p className="text-xs font-mono text-slate-500 mt-3 truncate text-left" title={scanProgress.file}>
-                      ...\{scanProgress.file?.split('\\').slice(-2).join('\\')}
+                    <p className="text-xs font-mono text-slate-500 mt-3 whitespace-normal break-all text-left" title={scanProgress.file}>
+                      {scanProgress.file}
                     </p>
                   </div>
                 )}
+                <button
+                  onClick={cancelScan}
+                  className="mt-6 px-6 py-2 rounded-xl font-bold transition-all bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-500/20"
+                >
+                  Cancel Scan
+                </button>
               </div>
             )}
           </div>
@@ -493,9 +597,9 @@ function App() {
                       <div className="flex items-center gap-3">
                         <Copy className="w-4 h-4 text-slate-500" />
                         <span className="text-sm font-mono text-slate-400">SHA256: {item.evidence.sha256.slice(0, 16)}...</span>
-                        <a href={`/api/file?path=${encodeURIComponent(item.subjectPath)}`} target="_blank" rel="noreferrer" className="text-sky-400 hover:text-sky-300 transition-colors ml-2" title="View File">
+                        <button onClick={() => openFileLocally(item.subjectPath)} className="text-sky-400 hover:text-sky-300 transition-colors ml-2" title="Open File Natively">
                           <Eye className="w-4 h-4" />
-                        </a>
+                        </button>
                       </div>
                       <div className="flex gap-2">
                         <button 
@@ -520,18 +624,18 @@ function App() {
                         <div className="text-xs font-bold text-green-500 uppercase tracking-widest mb-3 flex items-center gap-2"><CheckCircle className="w-4 h-4"/> Keep Original</div>
                         <div className="p-5 bg-green-500/5 border border-green-500/20 rounded-xl text-sm font-mono whitespace-normal break-all shadow-inner relative pr-10" title={item.evidence.proposedKeepPath || item.evidence.keptPath}>
                           {(item.evidence.proposedKeepPath || item.evidence.keptPath)?.split('\\').pop()}
-                          <a href={`/api/file?path=${encodeURIComponent(item.evidence.proposedKeepPath || item.evidence.keptPath)}`} target="_blank" rel="noreferrer" className="absolute right-3 top-1/2 -translate-y-1/2 text-sky-400 hover:text-sky-300 transition-colors" title="View Keep File">
+                          <button onClick={() => openFileLocally(item.evidence.proposedKeepPath || item.evidence.keptPath)} className="absolute right-3 top-1/2 -translate-y-1/2 text-sky-400 hover:text-sky-300 transition-colors" title="Open Keep File Natively">
                              <Eye className="w-5 h-5" />
-                          </a>
+                          </button>
                         </div>
                       </div>
                       <div>
                         <div className="text-xs font-bold text-rose-500 uppercase tracking-widest mb-3 flex items-center gap-2"><Trash2 className="w-4 h-4"/> Delete Duplicate</div>
                         <div className="p-5 bg-rose-500/5 border border-rose-500/20 rounded-xl text-sm font-mono whitespace-normal break-all opacity-60 line-through decoration-rose-500/50 shadow-inner relative pr-10" title={item.evidence.proposedDeletePaths?.[0] || item.evidence.deletedPaths?.[0]}>
                           {(item.evidence.proposedDeletePaths?.[0] || item.evidence.deletedPaths?.[0])?.split('\\').pop()}
-                          <a href={`/api/file?path=${encodeURIComponent(item.evidence.proposedDeletePaths?.[0] || item.evidence.deletedPaths?.[0] || '')}`} target="_blank" rel="noreferrer" className="absolute right-3 top-1/2 -translate-y-1/2 text-sky-400 hover:text-sky-300 transition-colors opacity-100" title="View Duplicate File">
+                          <button onClick={() => openFileLocally(item.evidence.proposedDeletePaths?.[0] || item.evidence.deletedPaths?.[0])} className="absolute right-3 top-1/2 -translate-y-1/2 text-sky-400 hover:text-sky-300 transition-colors opacity-100" title="Open Duplicate File Natively">
                              <Eye className="w-5 h-5" />
-                          </a>
+                          </button>
                         </div>
                       </div>
                    </div>
@@ -584,7 +688,7 @@ function App() {
                   {items.filter(i => i.type === 'organization_proposal').filter(i => proposalFilter === 'all' || (proposalFilter === 'move' ? i.action === 'move_file' : i.action === 'rename_file')).map(item => (
                     <tr key={item.id} className="hover:bg-slate-800/40 transition-colors">
                       <td className="px-6 py-5 align-top">
-                        <span className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider ${item.action === 'move_file' ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/20' : 'bg-pink-500/20 text-pink-400 border border-pink-500/20'}`}>
+                        <span className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider whitespace-nowrap inline-block ${item.action === 'move_file' ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/20' : 'bg-pink-500/20 text-pink-400 border border-pink-500/20'}`}>
                           {item.action.replace('_', ' ')}
                         </span>
                       </td>
@@ -593,9 +697,9 @@ function App() {
                           <div className="flex items-center gap-3 text-slate-500 line-through decoration-rose-500/50 overflow-hidden">
                             <div className="p-2 bg-slate-950 rounded border border-slate-800 shrink-0"><FileMinus className="w-4 h-4 text-rose-400"/></div>
                             <span className="text-xs font-mono whitespace-normal break-all w-full" title={item.subjectPath}>{item.subjectPath}</span>
-                            <a href={`/api/file?path=${encodeURIComponent(item.subjectPath)}`} target="_blank" rel="noreferrer" className="text-sky-400 hover:text-sky-300 transition-colors ml-auto shrink-0" title="View File">
+                            <button onClick={() => openFileLocally(item.subjectPath)} className="text-sky-400 hover:text-sky-300 transition-colors ml-auto shrink-0" title="Open File Natively">
                               <Eye className="w-4 h-4" />
-                            </a>
+                            </button>
                           </div>
                           
                           <div className="flex items-center gap-3 bg-sky-500/10 p-3 rounded-xl border border-sky-500/20 overflow-hidden group">
@@ -617,7 +721,7 @@ function App() {
                             ) : (
                               <>
                                 <span className="text-sm font-bold text-sky-400 whitespace-normal break-all w-full" title={item.proposedPath || item.evidence?.proposedName}>
-                                  {item.proposedPath || item.evidence?.proposedName}
+                                  {item.evidence?.proposedRelativePath || item.evidence?.proposedName || item.proposedPath}
                                 </span>
                                 <button 
                                   onClick={() => {
@@ -686,28 +790,50 @@ function App() {
               <CheckCircle className="w-12 h-12 text-green-400" />
             </div>
             <div className="text-center">
-              <h1 className="text-5xl font-bold mb-4 tracking-tight">Organization Complete!</h1>
-              <p className="text-xl text-slate-400">Your files are now beautifully categorized, dynamically renamed, and deduplicated.</p>
+              <h1 className="text-5xl font-bold mb-4 tracking-tight">
+                {lastApplyResult?.errors?.length ? 'Review Apply Results' : 'Organization Complete'}
+              </h1>
+              <p className="text-xl text-slate-400">Nyx applied approved changes and recorded the result in the local audit trail.</p>
             </div>
 
             <div className="grid grid-cols-3 gap-6 w-full mt-8">
               <div className="bg-slate-900/80 border border-slate-800 p-8 rounded-2xl text-center shadow-lg">
-                <div className="text-4xl font-bold text-sky-400 mb-3">{stats?.proposals ?? 0}</div>
-                <div className="text-slate-400 text-sm font-semibold uppercase tracking-widest">Files Organized</div>
+                <div className="text-4xl font-bold text-sky-400 mb-3">{lastApplyResult?.applied?.length ?? 0}</div>
+                <div className="text-slate-400 text-sm font-semibold uppercase tracking-widest">Actions Applied</div>
               </div>
               <div className="bg-slate-900/80 border border-slate-800 p-8 rounded-2xl text-center shadow-lg">
-                <div className="text-4xl font-bold text-green-400 mb-3">{stats?.duplicates ?? 0}</div>
-                <div className="text-slate-400 text-sm font-semibold uppercase tracking-widest">Duplicates Removed</div>
+                <div className="text-4xl font-bold text-green-400 mb-3">{stats?.pendingItems ?? 0}</div>
+                <div className="text-slate-400 text-sm font-semibold uppercase tracking-widest">Items Remaining</div>
               </div>
               <div className="bg-slate-900/80 border border-slate-800 p-8 rounded-2xl text-center shadow-lg">
-                <div className="text-4xl font-bold text-indigo-400 mb-3">{formatSize(stats?.totalSize ?? 0)}</div>
-                <div className="text-slate-400 text-sm font-semibold uppercase tracking-widest">Total Data Managed</div>
+                <div className="text-4xl font-bold text-rose-400 mb-3">{lastApplyResult?.errors?.length ?? 0}</div>
+                <div className="text-slate-400 text-sm font-semibold uppercase tracking-widest">Apply Errors</div>
               </div>
             </div>
 
-            <button onClick={() => setStep(7)} className="mt-8 bg-sky-600 hover:bg-sky-500 text-white px-10 py-4 rounded-xl font-bold transition-all shadow-xl shadow-sky-900/30 flex items-center gap-3 text-lg">
-              Proceed to Cloud Backup <ArrowRight className="w-6 h-6"/>
-            </button>
+            {lastApplyResult?.errors?.length ? (
+              <div className="w-full bg-rose-500/10 border border-rose-500/20 rounded-2xl p-5">
+                <div className="text-sm font-bold text-rose-300 mb-3 uppercase tracking-widest">Errors</div>
+                <div className="flex flex-col gap-2">
+                  {lastApplyResult.errors.map((error, index) => (
+                    <div key={`${error.message}-${index}`} className="text-sm text-rose-200 font-mono break-all">
+                      {error.message}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            <div className="flex gap-4 mt-8">
+              <button onClick={() => setStep(7)} className="bg-sky-600 hover:bg-sky-500 text-white px-10 py-4 rounded-xl font-bold transition-all shadow-xl shadow-sky-900/30 flex items-center gap-3 text-lg">
+                View V6 Cloud Backup Plan <ArrowRight className="w-6 h-6"/>
+              </button>
+              {lastApplyResult?.applied?.length ? (
+                <button onClick={rollbackChanges} className="bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 border border-rose-500/20 px-10 py-4 rounded-xl font-bold transition-all flex items-center gap-3 text-lg">
+                  Rollback Changes
+                </button>
+              ) : null}
+            </div>
           </div>
         )}
 

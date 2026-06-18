@@ -17,6 +17,7 @@ export async function buildLocalAudit({
   dbPath = ".nyx/nyx.db",
   onProgress,
   onDiscovery,
+  isCancelled,
   skippedFiles = []
 } = {}) {
   // If targetDirectory is provided, we use that. Otherwise fallback to engagement.md parsing.
@@ -51,6 +52,9 @@ export async function buildLocalAudit({
   const total = scanResult.files.length;
 
   for (const scannedFile of scanResult.files) {
+    if (isCancelled && isCancelled()) {
+      throw new Error("Scan cancelled by user");
+    }
     current++;
     if (onProgress) onProgress(current, total, scannedFile.absolutePath);
     
@@ -125,7 +129,7 @@ export async function buildLocalAudit({
   const weaklyStructuredFiles = files.filter((file) => file.structure.status === "weakly_structured");
   const unstructuredFiles = files.filter((file) => file.structure.status === "unstructured");
   
-  const organizationProposals = buildOrganizationProposals(files);
+  const organizationProposals = await buildOrganizationProposals(files);
   const irrelevanceFindings = findIrrelevanceFindings({
     duplicates,
     files,

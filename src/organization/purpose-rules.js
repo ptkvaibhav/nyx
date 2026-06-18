@@ -11,18 +11,17 @@ export const DEFAULT_FOLDERS_BY_CATEGORY = {
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-function extractDate(text, baseName) {
-  // Try to find YYYY-MM or MM-YYYY or DD-MM-YYYY or Month YYYY
-  const combined = (text + " " + baseName).replace(/\n/g, ' ');
+function extractDate(text, baseName, relativePath = "") {
+  const combined = (text + " " + baseName + " " + relativePath).replace(/\n/g, ' ');
   
-  // Look for "Month YYYY" e.g., "January 2024" or "Jan 2024"
   const monthNames = "(january|jan|february|feb|march|mar|april|apr|may|june|jun|july|jul|august|aug|september|sep|october|oct|november|nov|december|dec)";
-  const monthYearRegex = new RegExp(monthNames + "\\s*,?\\s*-?\\s*(\\d{4})", "i");
+  const monthYearRegex = new RegExp(monthNames + "\\s*,?\\s*-?\\s*(\\d{4}|\\d{2})(?:\\s|$|/|\\\\|\\.)", "i");
   let match = combined.match(monthYearRegex);
   if (match) {
     const mStr = match[1].toLowerCase().substring(0, 3);
     const mIndex = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"].indexOf(mStr);
-    return { year: match[2], month: String(mIndex + 1).padStart(2, '0') + "_" + MONTHS[mIndex] };
+    const yStr = match[2].length === 2 ? "20" + match[2] : match[2];
+    return { year: yStr, month: String(mIndex + 1).padStart(2, '0') + "_" + MONTHS[mIndex] };
   }
 
   // Look for YYYY-MM or YYYY_MM
@@ -109,7 +108,9 @@ export const CODE_EXTENSIONS = new Set([
   ".js", ".ts", ".jsx", ".tsx", ".py", ".java", ".c", ".cpp", ".h", ".hpp", ".cs", ".go", ".rs", ".rb", ".php", ".html", ".css", ".sql", ".sh", ".bat", ".ps1", ".yml", ".yaml", ".json", ".xml", ".md", ".sol"
 ]);
 
-export function inferPurposeDetails({ absolutePath = "", baseName = "", extension = "", category = "other", extractedText = "", isEntity = false, entityType = "" }) {
+export function inferPurposeDetails(fileProfile) {
+  const { absolutePath = "", baseName = "", extension = "", category = "other", extractedText = "", isEntity = false, entityType = "", relativePath = "" } = fileProfile;
+  
   if (isEntity) {
     if (entityType === "software_project") return { purpose: "code", expectedFolders: ["Projects"], matchedByRule: true, renameLabel: "Project" };
     if (entityType === "application") return { purpose: "installer", expectedFolders: ["Applications"], matchedByRule: true, renameLabel: "App" };
@@ -118,7 +119,7 @@ export function inferPurposeDetails({ absolutePath = "", baseName = "", extensio
   const normalizedBaseName = String(baseName || path.basename(absolutePath)).toLowerCase();
   const normalizedExtension = String(extension || path.extname(absolutePath)).toLowerCase();
   
-  const dateInfo = extractDate(extractedText, normalizedBaseName);
+  const dateInfo = extractDate(extractedText, normalizedBaseName, relativePath || absolutePath);
   
   // Specific Deep Content Rule: Pay Slips
   if (/pay[\s._-]?slip/i.test(normalizedBaseName) || /salary[\s._-]?slip/i.test(normalizedBaseName) || /pay\s*slip/i.test(extractedText) || /salary\s*slip/i.test(extractedText)) {

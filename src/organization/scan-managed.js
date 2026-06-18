@@ -118,7 +118,16 @@ function shouldExcludePath(relativePath, entryName, exclusions) {
   const normalizedEntryName = normalizeSegment(entryName);
 
   return exclusions.some((excluded) => {
-    return excluded === normalizedEntryName || segments.includes(excluded);
+    const isMatch = (val) => {
+      if (val === excluded) return true;
+      if (val.startsWith(excluded + "-")) return true;
+      if (val.startsWith(excluded + "_")) return true;
+      if (val.startsWith(excluded + ".")) return true;
+      if (val.startsWith(excluded + " ")) return true;
+      return false;
+    };
+
+    return isMatch(normalizedEntryName) || segments.some(isMatch);
   });
 }
 

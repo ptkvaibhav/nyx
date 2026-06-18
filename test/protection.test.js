@@ -19,9 +19,11 @@ test("buildProtectionPlan reports important backup status and archive proposals 
   });
   assert.equal(syncResult.action, "upload");
 
+  const dbPath = path.join(workspace, ".nyx", "nyx.db");
   const plan = await buildProtectionPlan({
     engagementPath: context.engagementPath,
-    configPath: context.configPath
+    configPath: context.configPath,
+    dbPath
   });
 
   assert.equal(plan.totals.importantFiles, 1);
@@ -45,7 +47,8 @@ test("applyApprovedReview archives a local copy only after verified backup proof
 
   const plan = await buildProtectionPlan({
     engagementPath: context.engagementPath,
-    configPath: context.configPath
+    configPath: context.configPath,
+    dbPath
   });
   
   const catalog = await Catalog.open(dbPath);

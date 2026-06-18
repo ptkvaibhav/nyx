@@ -6,7 +6,7 @@ import { findIrrelevanceFindings } from "../src/organization/irrelevance.js";
 import { buildOrganizationProposals } from "../src/organization/proposals.js";
 import { buildReviewQueue } from "../src/organization/review-queue.js";
 
-test("buildOrganizationProposals creates approval-gated move and rename proposals with evidence", () => {
+test("buildOrganizationProposals creates approval-gated move and rename proposals with evidence", async () => {
   const file = {
     rootPath: path.resolve("managed"),
     absolutePath: path.resolve("managed", "file123.pdf"),
@@ -29,7 +29,7 @@ test("buildOrganizationProposals creates approval-gated move and rename proposal
     }
   };
 
-  const proposals = buildOrganizationProposals([file]);
+  const proposals = await buildOrganizationProposals([file]);
 
   // Should have move and rename
   assert.equal(proposals.filter(p => p.action === "move_file").length, 1);
@@ -49,7 +49,7 @@ test("buildOrganizationProposals creates approval-gated move and rename proposal
   assert.equal(rename.evidence.sha256, "abcdef1234567890");
 });
 
-test("buildOrganizationProposals now allows deep nesting but respects system exclusions", () => {
+test("buildOrganizationProposals now allows deep nesting but respects system exclusions", async () => {
   const file = {
     rootPath: path.resolve("managed"),
     absolutePath: path.resolve("managed", "some", "deep", "path", "file123.pdf"),
@@ -66,7 +66,7 @@ test("buildOrganizationProposals now allows deep nesting but respects system exc
     }
   };
 
-  const proposals = buildOrganizationProposals([file]);
+  const proposals = await buildOrganizationProposals([file]);
 
   // Deep files are now eligible
   assert.equal(proposals.length, 1);

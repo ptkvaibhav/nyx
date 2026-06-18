@@ -17,7 +17,9 @@ export async function applyApprovedReview({
   const managedRoots = engagement.managedDirectories.map((root) => path.resolve(root));
   
   const allPendingItems = catalog.getPendingReviewItems();
-  const approvedItems = allPendingItems.filter((item) => item.approved === true && item.status === "approved");
+  const approvedItems = sortApprovedReviewItems(
+    allPendingItems.filter((item) => item.approved === true && item.status === "approved")
+  );
   
   const pathRedirects = new Map();
   const result = {
@@ -185,11 +187,11 @@ async function applyReviewItem({ item, managedRoots, pathRedirects }) {
   }
 
   if (item.action === "review_duplicate_deletion") {
-    return applyDuplicateDeletion({ item, managedRoots });
+    return applyDuplicateDeletion({ item, managedRoots, pathRedirects });
   }
 
   if (item.action === "archive_local_copy") {
-    return applyLocalArchive({ item, managedRoots });
+    return applyLocalArchive({ item, managedRoots, pathRedirects });
   }
 
   throw new Error(`Unsupported review action: ${item.action}`);
@@ -202,6 +204,17 @@ async function applyPathMutation({ item, managedRoots, pathRedirects }) {
 
   assertInsideManagedRoots(sourcePath, managedRoots);
   assertInsideManagedRoots(targetPath, managedRoots);
+
+  if (!(await exists(sourcePath))) {
+    return {
+      itemId: item.id,
+      action: item.action,
+      appliedAt: new Date().toISOString(),
+      previousPath: sourcePath,
+      newPath: targetPath,
+      status: "source_file_missing"
+    };
+  }
 
   const stats = await stat(sourcePath);
   const isDirectory = stats.isDirectory();
@@ -291,12 +304,12 @@ async function pruneEmptyDirectories(paths, managedRoots) {
   }
 }
 
-async function applyDuplicateDeletion({ item, managedRoots }) {
+async function applyDuplicateDeletion({ item, managedRoots, pathRedirects }) {
   const deletePaths = item.proposedDeletePaths ?? item.evidence?.proposedDeletePaths ?? [];
   const deletedPaths = [];
 
   for (const deletePath of deletePaths) {
-    const resolvedPath = path.resolve(deletePath);
+    const resolvedPath = resolveCurrentPath(path.resolve(deletePath), pathRedirects);
     assertInsideManagedRoots(resolvedPath, managedRoots);
     await assertFingerprint(resolvedPath, item.evidence?.sha256);
     await unlink(resolvedPath);
@@ -307,7 +320,7 @@ async function applyDuplicateDeletion({ item, managedRoots }) {
     itemId: item.id,
     action: item.action,
     appliedAt: new Date().toISOString(),
-    keptPath: item.proposedKeepPath ?? item.evidence?.proposedKeepPath,
+    keptPath: resolveCurrentPath(path.resolve(item.proposedKeepPath ?? item.evidence?.proposedKeepPath), pathRedirects),
     deletedPaths,
     rollback: {
       action: "manual_restore_required",
@@ -316,8 +329,8 @@ async function applyDuplicateDeletion({ item, managedRoots }) {
   };
 }
 
-async function applyLocalArchive({ item, managedRoots }) {
-  const sourcePath = path.resolve(item.subjectPath);
+async function applyLocalArchive({ item, managedRoots, pathRedirects }) {
+  const sourcePath = resolveCurrentPath(path.resolve(item.subjectPath), pathRedirects);
   const backupProof = item.backupProof ?? item.evidence?.backupProof;
   const expectedSha256 = item.evidence?.sha256;
 
@@ -392,4 +405,24 @@ function resolveTargetPath({ item, sourcePath }) {
   }
 
   return path.resolve(item.proposedPath);
+}
+
+function sortApprovedReviewItems(items) {
+  const actionPriority = new Map([
+    ["move_file", 0],
+    ["rename_file", 0],
+    ["review_duplicate_deletion", 1],
+    ["archive_local_copy", 2]
+  ]);
+
+  return [...items].sort((left, right) => {
+    const leftPriority = actionPriority.get(left.action) ?? 99;
+    const rightPriority = actionPriority.get(right.action) ?? 99;
+
+    if (leftPriority !== rightPriority) {
+      return leftPriority - rightPriority;
+    }
+
+    return String(left.id).localeCompare(String(right.id));
+  });
 }

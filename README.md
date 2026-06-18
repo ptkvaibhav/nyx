@@ -31,8 +31,9 @@ npm link
 
 | Command | Description |
 | :--- | :--- |
-| `nyx` | Launches the interactive React Web Dashboard powered by AI reasoning. Automatically manages UI building and Ollama setup. |
-| `nyx doctor` | Performs a system health check to ensure dependencies and configurations are correct. |
+| `nyx` | Launches the interactive local React Web Dashboard. Starts the dashboard quickly without installing any dependencies/software. |
+| `nyx doctor` | Performs a system health check, reporting database state, configured folders, and local Ollama/model status. |
+| `nyx setup-ai` | Triggers explicit onboarding for local AI, verifying connections and downloading/pulling the required Ollama model. |
 
 *Note: As of V5, pure batch CLI commands (like `audit-local` or `prepare-local-organization`) are deprecated in favor of the interactive UI wizard.*
 
@@ -44,6 +45,7 @@ Nyx is built with quality and security as first-class citizens:
 *   **Security & Dependency Checks**: `npm run check:security` & `npm audit`
 *   **Linting**: The UI is strictly typed and linted.
 *   **Data Flow Security**: All AI processing runs **locally** on your device via Ollama. Your documents and passwords are never sent to the cloud.
+*   **Local-First MVP**: The V5 milestone represents the local-first, safety-gated MVP. All file actions require user review/approval and can be fully rolled back.
 
 ---
 
@@ -55,5 +57,5 @@ Nyx is built with quality and security as first-class citizens:
 - [x] Rollback System
 - [x] React-based Visual Dashboard
 - [x] Duplicate Suffix Intelligence (`(1)`, `(2)`)
-- [x] **V5:** True AI Intelligence (Local LLM reasoning & Interactive Wizard)
-- [ ] **V6**: Google Drive & OneDrive Integration
+- [x] **V5:** True AI Intelligence (Local LLM reasoning & Interactive Wizard - Local-First MVP)
+- [ ] **V6**: Google Drive & OneDrive Integration (Cloud Backup & Mirroring)

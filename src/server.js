@@ -1,9 +1,12 @@
 import express from "express";
 import path from "node:path";
+import { realpath, access } from "node:fs/promises";
+import { constants } from "node:fs";
 import { Catalog } from "./core/catalog.js";
-import { applyApprovedReview } from "./organization/executor.js";
-import { initAI, askAI } from "./core/ai.js";
+import { applyApprovedReview, rollbackAppliedReview } from "./organization/executor.js";
+import { initAI, askAI, getAIStatus } from "./core/ai.js";
 import { buildLocalAudit } from "./organization/local-audit.js";
+import { loadEngagement } from "./engagement/parser.js";
 
 const DEFAULT_DB_PATH = ".nyx/nyx.db";
 
@@ -27,7 +30,35 @@ export async function startServer({ port = 3030, dbPath = DEFAULT_DB_PATH } = {}
   // API Routes
   
   let currentScanProgress = { current: 0, total: 0, file: "", status: "idle" };
-  let scanAbortController = null;
+  let scanCancelled = false;
+
+  app.get("/api/health", async (req, res) => {
+    try {
+      const managedRoots = await getManagedRoots();
+      
+      const __dirname = path.dirname(new URL(import.meta.url).pathname).replace(/^\/([A-Za-z]:)/, '$1');
+      const uiIndexPath = path.join(__dirname, "..", "ui", "dist", "index.html");
+      let uiBuilt = false;
+      try {
+        await access(uiIndexPath, constants.F_OK);
+        uiBuilt = true;
+      } catch {}
+
+      res.json({
+        ok: true,
+        dbPath: path.resolve(dbPath),
+        ai: getAIStatus(),
+        managedRoots,
+        uiBuilt
+      });
+    } catch (error) {
+      res.status(500).json({
+        ok: false,
+        error: error.message,
+        ai: getAIStatus()
+      });
+    }
+  });
 
   app.get("/api/scan/progress", (req, res) => {
     res.json(currentScanProgress);
@@ -37,11 +68,21 @@ export async function startServer({ port = 3030, dbPath = DEFAULT_DB_PATH } = {}
     const { directory, skippedFiles } = req.body;
     if (!directory) return res.status(400).json({ error: "Directory path required" });
 
+    let managedRoots;
+    try {
+      managedRoots = await getManagedRoots();
+      const resolvedDir = await getSafePath(directory, managedRoots);
+      assertInsideManagedRoots(resolvedDir, managedRoots);
+    } catch (error) {
+      return res.status(403).json({ error: error.message });
+    }
+
     // Prevent multiple concurrent scans for now
-    if (currentScanProgress.status === "running") {
+    if (currentScanProgress.status === "running" || currentScanProgress.status === "discovering") {
       return res.status(409).json({ error: "A scan is already in progress" });
     }
 
+    scanCancelled = false;
     currentScanProgress = { current: 0, total: 0, file: "", status: "running" };
 
     // Fire and forget the scan job
@@ -51,15 +92,20 @@ export async function startServer({ port = 3030, dbPath = DEFAULT_DB_PATH } = {}
           dbPath,
           targetDirectory: directory,
           skippedFiles: skippedFiles || [],
+          isCancelled: () => scanCancelled,
           onDiscovery: (count, path) => {
+             if (scanCancelled) return;
              currentScanProgress = { current: count, total: 0, file: path, status: "discovering" };
           },
           onProgress: (current, total, file) => {
+             if (scanCancelled) return;
              currentScanProgress = { current, total, file, status: "running" };
           }
         });
 
-        if (audit.needsPassword) {
+        if (scanCancelled) {
+          currentScanProgress.status = "cancelled";
+        } else if (audit.needsPassword) {
           currentScanProgress.status = "needs_password";
           currentScanProgress.passwordFile = audit.passwordFile;
         } else {
@@ -67,12 +113,18 @@ export async function startServer({ port = 3030, dbPath = DEFAULT_DB_PATH } = {}
         }
       } catch (error) {
         console.error("Background Scan Error:", error);
-        currentScanProgress.status = "failed";
+        currentScanProgress.status = scanCancelled ? "cancelled" : "failed";
         currentScanProgress.error = error.message;
       }
     })();
 
     res.json({ success: true, message: "Scan started in background" });
+  });
+
+  app.post("/api/scan/cancel", (req, res) => {
+    scanCancelled = true;
+    currentScanProgress.status = "cancelled";
+    res.json({ success: true, message: "Scan cancellation requested" });
   });
 
   app.post("/api/add-password", async (req, res) => {
@@ -117,20 +169,23 @@ export async function startServer({ port = 3030, dbPath = DEFAULT_DB_PATH } = {}
   });
 
   app.get("/api/select-directory", async (req, res) => {
+    res.status(501).json({
+      error: "Native folder selection is not enabled. Enter an approved local path manually.",
+      managedRoots: await getManagedRoots()
+    });
+  });
+
+  app.get("/api/open-file", async (req, res) => {
     try {
-      const { execSync } = await import("node:child_process");
-      const script = `
-        Add-Type -AssemblyName System.windows.forms
-        $f = New-Object System.Windows.Forms.FolderBrowserDialog
-        $f.ShowNewFolderButton = $false
-        if ($f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
-          Write-Output $f.SelectedPath
-        }
-      `;
-      const result = execSync(`powershell.exe -NoProfile -Command "${script.replace(/\n/g, '; ')}"`, { encoding: 'utf8' }).trim();
-      res.json({ directory: result });
-    } catch (e) {
-      res.status(500).json({ error: e.message });
+      const filePath = req.query.path;
+      if (!filePath) return res.status(400).send("Path is required");
+      const managedRoots = await getManagedRoots();
+      const absolutePath = await getSafePath(filePath, managedRoots);
+      const open = (await import("open")).default;
+      await open(absolutePath);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(error.statusCode ?? 500).json({ error: error.message });
     }
   });
 
@@ -141,17 +196,17 @@ export async function startServer({ port = 3030, dbPath = DEFAULT_DB_PATH } = {}
         return res.status(400).send("Path is required");
       }
       
-      const fs = await import("node:fs/promises");
-      const absolutePath = path.resolve(filePath);
+      const managedRoots = await getManagedRoots();
+      const absolutePath = await getSafePath(filePath, managedRoots);
       
       try {
-        await fs.access(absolutePath);
+        await access(absolutePath, constants.F_OK);
         res.sendFile(absolutePath);
       } catch {
         res.status(404).send("File not found");
       }
     } catch (error) {
-      res.status(500).send(error.message);
+      res.status(error.statusCode ?? 500).send(error.message);
     }
   });
 
@@ -278,6 +333,15 @@ Return ONLY a raw JSON string like {"proposedName": "New Name.pdf", "reasoning":
     }
   });
 
+  app.post("/api/rollback", async (req, res) => {
+    try {
+      const result = await rollbackAppliedReview({ catalog });
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Serve UI static files
   const __dirname = path.dirname(new URL(import.meta.url).pathname).replace(/^\/([A-Za-z]:)/, '$1');
   const uiPath = path.join(__dirname, "..", "ui", "dist");
@@ -300,8 +364,40 @@ Return ONLY a raw JSON string like {"proposedName": "New Name.pdf", "reasoning":
 
   return new Promise((resolve) => {
     const server = app.listen(port, () => {
-      console.log(`Nyx Dashboard running at http://localhost:${port}`);
+      const address = server.address();
+      const actualPort = typeof address === "object" && address ? address.port : port;
+      console.log(`Nyx Dashboard running at http://localhost:${actualPort}`);
       resolve(server);
     });
   });
+}
+
+async function getManagedRoots() {
+  const engagement = await loadEngagement("docs/engagement.md");
+  return engagement.managedDirectories.map((root) => path.resolve(root));
+}
+
+function assertInsideManagedRoots(targetPath, managedRoots) {
+  const insideManagedRoot = managedRoots.some((rootPath) => {
+    const relativePath = path.relative(rootPath, targetPath);
+    return relativePath === "" || (!relativePath.startsWith("..") && !path.isAbsolute(relativePath));
+  });
+
+  if (!insideManagedRoot) {
+    const error = new Error(`Path is outside approved managed directories: ${targetPath}`);
+    error.statusCode = 403;
+    throw error;
+  }
+}
+
+async function getSafePath(filePath, managedRoots) {
+  let resolvedPath = path.resolve(filePath);
+  try {
+    resolvedPath = await realpath(resolvedPath);
+  } catch {
+    // If file doesn't exist, realpath throws. We fallback to path.resolve.
+  }
+  
+  assertInsideManagedRoots(resolvedPath, managedRoots);
+  return resolvedPath;
 }
