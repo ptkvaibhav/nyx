@@ -131,7 +131,7 @@ export async function buildLocalAudit({
   const weaklyStructuredFiles = files.filter((file) => file.structure.status === "weakly_structured");
   const unstructuredFiles = files.filter((file) => file.structure.status === "unstructured");
   
-  const organizationProposals = await buildOrganizationProposals(files);
+  const organizationProposals = await buildOrganizationProposals(files, true);
   const irrelevanceFindings = findIrrelevanceFindings({
     duplicates,
     files,

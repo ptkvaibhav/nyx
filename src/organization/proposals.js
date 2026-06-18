@@ -32,7 +32,7 @@ const PURPOSE_LABELS = {
   other: "File"
 };
 
-export async function buildOrganizationProposals(files = []) {
+export async function buildOrganizationProposals(files = [], skipAI = false) {
   const duplicates = findDuplicateGroups(files);
   const duplicateDeletePaths = new Set();
   for (const group of duplicates) {
@@ -67,7 +67,7 @@ export async function buildOrganizationProposals(files = []) {
     }
 
     if (file.structure?.renameRecommended) {
-      const renameProposal = await buildRenameProposal(file);
+      const renameProposal = await buildRenameProposal(file, skipAI);
       if (renameProposal) {
         proposals.push(renameProposal);
       }
@@ -108,8 +108,8 @@ function buildMoveProposal(file) {
   };
 }
 
-async function buildRenameProposal(file) {
-  const proposedName = await proposeFileName(file);
+async function buildRenameProposal(file, skipAI = false) {
+  const proposedName = await proposeFileName(file, skipAI);
 
   if (proposedName.toLowerCase() === file.baseName.toLowerCase()) {
     return null;
@@ -136,13 +136,18 @@ async function buildRenameProposal(file) {
   };
 }
 
-async function proposeFileName(file) {
+async function proposeFileName(file, skipAI = false) {
   const purpose = file.structure?.purpose ?? file.classification?.category ?? "other";
   let label = file.structure?.renameLabel ?? PURPOSE_LABELS[purpose] ?? PURPOSE_LABELS.other;
   
   const extension = file.extension ?? path.extname(file.absolutePath);
   const currentBaseName = path.basename(file.absolutePath, extension);
   
+  if (skipAI) {
+    const timestamp = file.modifiedAt.split("T")[0].replaceAll("-", "");
+    return `${label}_${timestamp}${extension}`;
+  }
+
   const hasText = file.extractedText && file.extractedText.length > 50;
   
   const prompt = hasText 
