@@ -24,6 +24,17 @@ export async function initAI(mock = false) {
     return aiStatus;
   }
 
+  // Bypass AI setup and return unavailable in unit tests to ensure deterministic runs
+  if (typeof process !== "undefined" && (process.env.NODE_TEST_CONTEXT || process.env.NODE_ENV === "test")) {
+    aiStatus = {
+      available: false,
+      model: OLLAMA_MODEL,
+      reason: "test_bypass",
+      checkedAt: new Date().toISOString()
+    };
+    return aiStatus;
+  }
+
   if (initInProgress) {
     return initInProgress;
   }
