@@ -1,4 +1,5 @@
 import { loadConfig } from "./config.js";
+import { setupOllama } from "./ollama-manager.js";
 
 const OLLAMA_URL = "http://localhost:11434/api/chat";
 let OLLAMA_MODEL = "gemma"; 
@@ -10,6 +11,8 @@ let aiStatus = {
 };
 let warnedUnavailable = false;
 
+let initInProgress = null;
+
 export async function initAI(mock = false) {
   if (mock) {
     aiStatus = {
@@ -20,56 +23,51 @@ export async function initAI(mock = false) {
     };
     return aiStatus;
   }
-  
-  try {
-    const { config } = await loadConfig();
-    if (config.ai?.model) {
-      OLLAMA_MODEL = config.ai.model;
-    }
 
-    // Ping Ollama to see if it's running
-    const response = await fetch("http://localhost:11434/api/tags");
-    if (!response.ok) {
-      throw new Error(`Ollama responded with status: ${response.status}`);
-    }
-    const data = await response.json();
-    const models = Array.isArray(data.models) ? data.models.map(m => m.name).filter(Boolean) : [];
-    
-    let modelFound = models.some((m) => m === OLLAMA_MODEL || m.includes(OLLAMA_MODEL));
-    if (!modelFound && models.length > 0) {
-      const fallbackModel = models[0];
-      console.warn(`Configured model '${OLLAMA_MODEL}' not found. Dynamically falling back to installed model: '${fallbackModel}'`);
-      OLLAMA_MODEL = fallbackModel;
-      modelFound = true;
-    }
-
-    aiStatus = {
-      available: models.length > 0,
-      model: OLLAMA_MODEL,
-      reason: modelFound ? "ready" : "model_not_found",
-      checkedAt: new Date().toISOString(),
-      models
-    };
-    warnedUnavailable = false;
-    
-    if (models.length > 0 && !models.some(m => m.includes("gemma")) && typeof process !== "undefined" && process.env.NODE_ENV !== "test") {
-      console.warn("Warning: 'gemma' model not found in Ollama. Make sure to run `ollama run gemma`.");
-    }
-  } catch (error) {
-    aiStatus = {
-      available: false,
-      model: OLLAMA_MODEL,
-      reason: error.message,
-      checkedAt: new Date().toISOString()
-    };
-
-    if (!warnedUnavailable && typeof process !== "undefined" && process.env.NODE_ENV !== "test" && !process.env.NODE_TEST_CONTEXT) {
-      console.warn(`AI unavailable; continuing with deterministic rules. Reason: ${error.message}`);
-      warnedUnavailable = true;
-    }
+  if (initInProgress) {
+    return initInProgress;
   }
 
-  return aiStatus;
+  initInProgress = (async () => {
+    try {
+      const { config } = await loadConfig();
+      if (config.ai?.model) {
+        OLLAMA_MODEL = config.ai.model;
+      }
+
+      // Call setupOllama to ensure it is installed, running, and the model is pulled!
+      const ollamaStatus = await setupOllama();
+      
+      // Update active model from what setupOllama resolved
+      OLLAMA_MODEL = ollamaStatus.selectedModel || OLLAMA_MODEL;
+
+      aiStatus = {
+        available: ollamaStatus.available,
+        model: OLLAMA_MODEL,
+        reason: ollamaStatus.reason,
+        checkedAt: new Date().toISOString(),
+        models: ollamaStatus.installedModels
+      };
+      warnedUnavailable = false;
+    } catch (error) {
+      aiStatus = {
+        available: false,
+        model: OLLAMA_MODEL,
+        reason: error.message,
+        checkedAt: new Date().toISOString()
+      };
+
+      if (!warnedUnavailable && typeof process !== "undefined" && process.env.NODE_ENV !== "test" && !process.env.NODE_TEST_CONTEXT) {
+        console.warn(`AI unavailable; continuing with deterministic rules. Reason: ${error.message}`);
+        warnedUnavailable = true;
+      }
+    } finally {
+      initInProgress = null;
+    }
+    return aiStatus;
+  })();
+
+  return initInProgress;
 }
 
 export async function askAI(prompt, systemPrompt = "You are a helpful file organization AI. You must respond in valid JSON format.") {

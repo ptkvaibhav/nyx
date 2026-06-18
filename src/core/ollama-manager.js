@@ -2,13 +2,52 @@
 // security-bypass: execSync usage
 // security-bypass: spawnSync usage
 import { spawn, execSync } from "node:child_process";
+import path from "node:path";
+import { existsSync } from "node:fs";
 import { loadConfig } from "./config.js";
 
 const OLLAMA_TAGS_URL = "http://localhost:11434/api/tags";
 
-async function isOllamaInstalled() {
+let resolvedOllamaCmd = null;
+
+function getOllamaCommand() {
+  if (resolvedOllamaCmd) return resolvedOllamaCmd;
+
+  // 1. Try default system PATH command
   try {
     execSync("ollama --version", { stdio: "ignore" });
+    resolvedOllamaCmd = "ollama";
+    return resolvedOllamaCmd;
+  } catch {
+    // 2. If it fails, check default Windows installation paths
+    if (process.platform === "win32") {
+      const localAppData = process.env.LOCALAPPDATA;
+      if (localAppData) {
+        const defaultPath = path.join(localAppData, "Programs", "Ollama", "ollama.exe");
+        if (existsSync(defaultPath)) {
+          resolvedOllamaCmd = defaultPath;
+          return resolvedOllamaCmd;
+        }
+      }
+      const programFiles = process.env.PROGRAMFILES;
+      if (programFiles) {
+        const progPath = path.join(programFiles, "Ollama", "ollama.exe");
+        if (existsSync(progPath)) {
+          resolvedOllamaCmd = progPath;
+          return resolvedOllamaCmd;
+        }
+      }
+    }
+  }
+
+  // Fallback to default
+  return "ollama";
+}
+
+async function isOllamaInstalled() {
+  try {
+    const cmd = getOllamaCommand();
+    execSync(`"${cmd}" --version`, { stdio: "ignore" });
     return true;
   } catch {
     return false;
@@ -20,6 +59,8 @@ async function installOllama() {
   try {
     execSync("winget install Ollama.Ollama --accept-source-agreements --accept-package-agreements", { stdio: "inherit" });
     console.log("Ollama installation command completed.");
+    // Clear cache to re-detect full path after installation
+    resolvedOllamaCmd = null;
     return true;
   } catch (err) {
     console.error("winget installation failed. Please install Ollama manually from https://ollama.com");
@@ -35,9 +76,10 @@ async function ensureOllamaRunning() {
     // Not running
   }
 
-  console.log("Ollama service is not running. Starting Ollama...");
+  const cmd = getOllamaCommand();
+  console.log(`Ollama service is not running. Starting Ollama from ${cmd}...`);
   try {
-    const process = spawn("ollama", ["serve"], {
+    const process = spawn(cmd, ["serve"], {
       detached: true,
       stdio: "ignore",
       windowsHide: true
@@ -77,7 +119,8 @@ async function pullModel(modelName) {
 
   // Fallback to CLI pull
   try {
-    execSync(`ollama pull ${modelName}`, { stdio: "inherit" });
+    const cmd = getOllamaCommand();
+    execSync(`"${cmd}" pull ${modelName}`, { stdio: "inherit" });
     console.log(`Model '${modelName}' pulled successfully via CLI.`);
     return true;
   } catch (err) {

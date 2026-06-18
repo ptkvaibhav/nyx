@@ -44,13 +44,36 @@ export async function startServer({ port = 3030, dbPath = DEFAULT_DB_PATH } = {}
         uiBuilt = true;
       } catch {}
 
+      const aiStatus = getAIStatus();
+      // If AI is not available, trigger initialization asynchronously in the background
+      if (!aiStatus.available) {
+        initAI().catch(err => {
+          if (process.env.NODE_ENV !== "test" && !process.env.NODE_TEST_CONTEXT) {
+            console.error("Background AI auto-recovery check failed:", err.message);
+          }
+        });
+      }
+
       res.json({
         ok: true,
         dbPath: path.resolve(dbPath),
-        ai: getAIStatus(),
+        ai: aiStatus,
         managedRoots,
         uiBuilt
       });
+    } catch (error) {
+      res.status(500).json({
+        ok: false,
+        error: error.message,
+        ai: getAIStatus()
+      });
+    }
+  });
+
+  app.post("/api/ai/recheck", async (req, res) => {
+    try {
+      const aiStatus = await initAI();
+      res.json({ ok: true, ai: aiStatus });
     } catch (error) {
       res.status(500).json({
         ok: false,

@@ -37,6 +37,7 @@ function App() {
   const [directory, setDirectory] = useState<string>('');
   const [health, setHealth] = useState<Health | null>(null);
   const [scanning, setScanning] = useState(false);
+  const [checkingAi, setCheckingAi] = useState(false);
   const [needsPassword, setNeedsPassword] = useState(false);
   const [passwordFile, setPasswordFile] = useState("");
   const [pdfPassword, setPdfPassword] = useState("");
@@ -121,6 +122,21 @@ function App() {
       }
     } catch {
       console.error('Failed to fetch health status');
+    }
+  };
+
+  const recheckAi = async () => {
+    setCheckingAi(true);
+    try {
+      const res = await fetch('/api/ai/recheck', { method: 'POST' });
+      const data = await res.json();
+      if (data.ai) {
+        setHealth(prev => prev ? { ...prev, ai: data.ai } : null);
+      }
+    } catch (e) {
+      console.error("Failed to recheck AI status", e);
+    } finally {
+      setCheckingAi(false);
     }
   };
 
@@ -447,8 +463,32 @@ function App() {
               </div>
 
               <div className="mt-4 grid gap-3">
-                <div className={`rounded-xl border px-4 py-3 text-sm ${health?.ai?.available ? 'border-green-500/20 bg-green-500/10 text-green-300' : 'border-amber-500/20 bg-amber-500/10 text-amber-300'}`}>
-                  AI status: {health?.ai?.available ? `Ready (${health.ai.model})` : `Deterministic mode${health?.ai?.reason ? ` - ${health.ai.reason}` : ''}`}
+                <div className={`rounded-xl border px-4 py-3 text-sm flex items-center justify-between gap-3 ${health?.ai?.available ? 'border-green-500/20 bg-green-500/10 text-green-300' : 'border-amber-500/20 bg-amber-500/10 text-amber-300'}`}>
+                  <div>
+                    <span className="font-semibold">AI status:</span>{' '}
+                    {health?.ai?.available
+                      ? `Ready (${health.ai.model})`
+                      : `Deterministic mode${health?.ai?.reason ? ` - ${health.ai.reason}` : ''}`}
+                  </div>
+                  {!health?.ai?.available && (
+                    <button
+                      onClick={recheckAi}
+                      disabled={checkingAi}
+                      className="text-xs bg-amber-600 hover:bg-amber-500 disabled:bg-amber-800 text-white px-3 py-1.5 rounded-lg font-semibold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95 shrink-0"
+                    >
+                      {checkingAi ? (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          Checking...
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5" />
+                          Recheck
+                        </>
+                      )}
+                    </button>
+                  )}
                 </div>
 
                 {health?.managedRoots?.length ? (
