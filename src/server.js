@@ -4,9 +4,10 @@ import { realpath, access } from "node:fs/promises";
 import { constants } from "node:fs";
 import { Catalog } from "./core/catalog.js";
 import { applyApprovedReview, rollbackAppliedReview } from "./organization/executor.js";
-import { initAI, askAI, getAIStatus } from "./core/ai.js";
+import { initAI, askAI, getAIStatus, robustParseJSON } from "./core/ai.js";
 import { buildLocalAudit } from "./organization/local-audit.js";
 import { loadEngagement } from "./engagement/parser.js";
+import { extractContent } from "./core/content-extractor.js";
 
 const DEFAULT_DB_PATH = ".nyx/nyx.db";
 
@@ -360,12 +361,30 @@ Give me ONLY a raw JSON string like {"exclusions": ["folder1"], "reasoning": "wh
     try {
       const { fileInfo, subjectPath } = req.body;
       const file = subjectPath ? catalog.getFileByPath(subjectPath) : null;
-      const textSample = file?.extractedText ? file.extractedText.slice(0, 1000) : "No text available.";
       
+      if (file?.proposedName && file?.aiReasoning) {
+        res.json({
+          proposedName: file.proposedName,
+          reasoning: file.aiReasoning
+        });
+        return;
+      }
+      
+      let extractedText = file?.extractedText;
+      if (!extractedText && subjectPath) {
+        try {
+          extractedText = await extractContent(subjectPath);
+        } catch (e) {
+          console.warn("Failed to extract content on demand for AI rename:", e.message);
+        }
+      }
+      
+      const textSample = extractedText ? extractedText.slice(0, 1000) : "No text available.";
       const fileRelativePath = file?.relativePath || subjectPath || fileInfo.currentName;
+      const currentName = fileInfo.currentName || (subjectPath ? path.basename(subjectPath) : "unknown");
 
-      const prompt = file?.extractedText && file.extractedText.length > 50
-        ? `I have a file named "${fileInfo.currentName}" with category "${fileInfo.category}" and purpose "${fileInfo.purpose}".
+      const prompt = extractedText && extractedText.length > 50
+        ? `I have a file named "${currentName}" with category "${fileInfo.category}" and purpose "${fileInfo.purpose}".
 It is located at: "${fileRelativePath}"
 Here is a sample of its extracted text content:
 ---
@@ -375,7 +394,7 @@ Analyze the text, file name, and path to determine exactly what this file is (e.
 Propose a highly descriptive and structured file name. Use Spaces, Title Case, and clear descriptors (e.g., "Pratik Vaibhav - Aadhaar Card.pdf" or "HDFC Bank Statement - Jan 2024.pdf").
 Do not include the extension in the proposed name unless you match the original one.
 Return ONLY a raw JSON string like {"proposedName": "New Name.pdf", "reasoning": "why"}. No markdown.`
-        : `I have a file named "${fileInfo.currentName}" with category "${fileInfo.category}" and purpose "${fileInfo.purpose}".
+        : `I have a file named "${currentName}" with category "${fileInfo.category}" and purpose "${fileInfo.purpose}".
 It is located at: "${fileRelativePath}"
 Analyze the file name, extension, and parent folder path to determine exactly what this file is.
 Propose a highly descriptive and structured file name. Use Spaces, Title Case, and clear descriptors.
@@ -383,8 +402,8 @@ Do not include the extension in the proposed name unless you match the original 
 Return ONLY a raw JSON string like {"proposedName": "New Name.pdf", "reasoning": "why"}. No markdown.`;
 
       const aiResponse = await askAI(prompt, "You are a highly intelligent file renaming assistant. You must analyze the text content and path context to extract the semantic meaning of the document and propose a human-readable, descriptive name.");
-      const clean = cleanJSON(aiResponse);
-      res.json(JSON.parse(clean));
+      const parsed = robustParseJSON(aiResponse);
+      res.json(parsed);
     } catch (error) {
       res.status(500).json({ error: error.message, reasoning: "AI parsing failed" });
     }

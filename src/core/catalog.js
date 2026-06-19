@@ -15,8 +15,9 @@ export class Catalog {
       INSERT INTO files (
         absolute_path, relative_path, root_path, base_name, extension,
         size_bytes, modified_at, sha256, category, purpose,
-        structure_status, move_recommended, rename_recommended, last_scanned_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        structure_status, move_recommended, rename_recommended, last_scanned_at,
+        extracted_text, proposed_name, expected_folder, ai_reasoning
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(absolute_path) DO UPDATE SET
         relative_path=excluded.relative_path,
         root_path=excluded.root_path,
@@ -30,7 +31,11 @@ export class Catalog {
         structure_status=excluded.structure_status,
         move_recommended=excluded.move_recommended,
         rename_recommended=excluded.rename_recommended,
-        last_scanned_at=excluded.last_scanned_at
+        last_scanned_at=excluded.last_scanned_at,
+        extracted_text=excluded.extracted_text,
+        proposed_name=excluded.proposed_name,
+        expected_folder=excluded.expected_folder,
+        ai_reasoning=excluded.ai_reasoning
     `);
 
     stmt.run(
@@ -47,7 +52,11 @@ export class Catalog {
       file.structure?.status,
       file.structure?.moveRecommended ? 1 : 0,
       file.structure?.renameRecommended ? 1 : 0,
-      new Date().toISOString()
+      new Date().toISOString(),
+      file.extractedText ?? "",
+      file.structure?.proposedName ?? "",
+      file.structure?.expectedFolder ?? "",
+      file.structure?.aiReasoning ?? ""
     );
   }
 
@@ -182,12 +191,19 @@ function mapDbFileToProfile(row) {
     modifiedAt: row.modified_at,
     sha256: row.sha256,
     lastScannedAt: row.last_scanned_at,
+    extractedText: row.extracted_text || "",
+    proposedName: row.proposed_name || "",
+    expectedFolder: row.expected_folder || "",
+    aiReasoning: row.ai_reasoning || "",
     classification: { category: row.category },
     structure: {
       purpose: row.purpose,
       status: row.structure_status,
       moveRecommended: row.move_recommended === 1,
-      renameRecommended: row.rename_recommended === 1
+      renameRecommended: row.rename_recommended === 1,
+      proposedName: row.proposed_name || "",
+      expectedFolder: row.expected_folder || "",
+      aiReasoning: row.ai_reasoning || ""
     }
   };
 }

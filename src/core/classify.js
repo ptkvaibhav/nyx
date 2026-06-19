@@ -52,6 +52,7 @@ export function classifyFile(fileProfile) {
   const category = detectCategory(extension);
   const folderSegments = inferPurposeDetails({
     absolutePath: fileProfile.absolutePath,
+    relativePath: fileProfile.relativePath,
     baseName,
     extension,
     category,

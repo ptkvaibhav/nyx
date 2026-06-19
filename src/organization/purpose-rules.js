@@ -118,11 +118,14 @@ export function inferPurposeDetails(fileProfile) {
 
   const normalizedBaseName = String(baseName || path.basename(absolutePath)).toLowerCase();
   const normalizedExtension = String(extension || path.extname(absolutePath)).toLowerCase();
+  const normalizedRelativePath = String(relativePath || absolutePath).toLowerCase();
   
   const dateInfo = extractDate(extractedText, normalizedBaseName, relativePath || absolutePath);
   
+  const pathContainsPaySlip = normalizedRelativePath.includes("pay slip") || normalizedRelativePath.includes("payslip") || normalizedRelativePath.includes("pay_slip");
+
   // Specific Deep Content Rule: Pay Slips
-  if (/pay[\s._-]?slip/i.test(normalizedBaseName) || /salary[\s._-]?slip/i.test(normalizedBaseName) || /pay\s*slip/i.test(extractedText) || /salary\s*slip/i.test(extractedText)) {
+  if (/pay[\s._-]?slip/i.test(normalizedBaseName) || /salary[\s._-]?slip/i.test(normalizedBaseName) || /pay\s*slip/i.test(extractedText) || /salary\s*slip/i.test(extractedText) || pathContainsPaySlip) {
     let folder = "Finance/Pay_Slips";
     let label = "Pay_Slip";
     if (dateInfo.year) {
@@ -137,7 +140,7 @@ export function inferPurposeDetails(fileProfile) {
   }
 
   // Specific Deep Content Rule: Form 16 / IT Returns
-  if (normalizedBaseName.includes("f16") || normalizedBaseName.includes("form 16") || /form\s*no\\.?\s*16/i.test(extractedText) || /income\s*tax\s*return/i.test(extractedText) || /it\s*computation/i.test(extractedText)) {
+  if (normalizedBaseName.includes("f16") || normalizedBaseName.includes("form 16") || normalizedBaseName.includes("itcs") || /form\s*no\\.?\s*16/i.test(extractedText) || /income\s*tax\s*return/i.test(extractedText) || /it\s*computation/i.test(extractedText) || /income\s*tax\s*computation/i.test(extractedText) || /income\s*tax\s*computation/i.test(normalizedBaseName)) {
     let yearMatch = extractedText.match(/Assessment Year[:\s]*(\d{4}-\d{2})/i) || extractedText.match(/(\d{4}-\d{2})/);
     if (!yearMatch) yearMatch = normalizedBaseName.match(/(\d{4}-\d{2})/);
     let folder = "Finance/IT_Returns";

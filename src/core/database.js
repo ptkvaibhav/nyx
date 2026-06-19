@@ -27,9 +27,27 @@ export async function initializeDatabase(dbPath = DEFAULT_DB_PATH) {
       structure_status TEXT,
       move_recommended BOOLEAN,
       rename_recommended BOOLEAN,
-      last_scanned_at TEXT NOT NULL
+      last_scanned_at TEXT NOT NULL,
+      extracted_text TEXT,
+      proposed_name TEXT,
+      expected_folder TEXT,
+      ai_reasoning TEXT
     )
   `);
+
+  // Migrate existing databases to add the new columns if they do not exist
+  try {
+    db.exec("ALTER TABLE files ADD COLUMN extracted_text TEXT");
+  } catch (e) {}
+  try {
+    db.exec("ALTER TABLE files ADD COLUMN proposed_name TEXT");
+  } catch (e) {}
+  try {
+    db.exec("ALTER TABLE files ADD COLUMN expected_folder TEXT");
+  } catch (e) {}
+  try {
+    db.exec("ALTER TABLE files ADD COLUMN ai_reasoning TEXT");
+  } catch (e) {}
 
   db.exec(`CREATE INDEX IF NOT EXISTS idx_files_sha256 ON files(sha256)`);
 

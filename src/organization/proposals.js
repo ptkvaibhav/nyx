@@ -79,8 +79,8 @@ export async function buildOrganizationProposals(files = [], skipAI = false) {
 }
 
 function buildMoveProposal(file) {
-  const targetFolder = file.structure.expectedFolders?.[0];
-  if (!targetFolder) {
+  const targetFolder = file.structure.expectedFolder || file.structure.expectedFolders?.[0];
+  if (!targetFolder || targetFolder.toLowerCase() === "unsorted") {
     return null;
   }
   const proposedRelativePath = path.posix.join(targetFolder, file.baseName);
@@ -109,7 +109,15 @@ function buildMoveProposal(file) {
 }
 
 async function buildRenameProposal(file, skipAI = false) {
-  const proposedName = await proposeFileName(file, skipAI);
+  let proposedName = file.structure?.proposedName;
+  const extension = file.extension ?? path.extname(file.absolutePath);
+
+  if (!proposedName) {
+    proposedName = await proposeFileName(file, skipAI);
+  } else {
+    const cleanProposed = proposedName.replace(new RegExp(`\\${extension}$`, 'i'), '').trim();
+    proposedName = `${cleanProposed}${extension}`;
+  }
 
   if (proposedName.toLowerCase() === file.baseName.toLowerCase()) {
     return null;

@@ -141,3 +141,62 @@ export async function askAI(prompt, systemPrompt = "You are a helpful file organ
 export function getAIStatus() {
   return { ...aiStatus };
 }
+
+export function robustParseJSON(str) {
+  let cleaned = str.trim();
+  
+  // 1. Remove markdown block formatting if present
+  const match = cleaned.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+  if (match) {
+    cleaned = match[1].trim();
+  }
+  
+  // 2. Fix unescaped backslashes in paths/strings.
+  // Replace any backslash that is not followed by a valid JSON escape character (", \, /, b, f, n, r, t, u)
+  cleaned = cleaned.replace(/\\(?!["\\/bfnrtu])/g, "/");
+
+  try {
+    return JSON.parse(cleaned);
+  } catch (e) {
+    try {
+      const keys = ["category", "purpose", "expectedFolder", "proposedName", "reasoning"];
+      const repairedObj = {};
+      
+      for (const key of keys) {
+        const keyRegex = new RegExp(`"${key}"\\s*:\\s*"`, 'i');
+        const keyMatch = cleaned.match(keyRegex);
+        if (keyMatch) {
+          const startIndex = keyMatch.index + keyMatch[0].length;
+          
+          let valueEndIndex = -1;
+          let tempIndex = startIndex;
+          while (tempIndex < cleaned.length) {
+            const nextQuote = cleaned.indexOf('"', tempIndex);
+            if (nextQuote === -1) break;
+            
+            const afterQuote = cleaned.slice(nextQuote + 1).trim();
+            if (afterQuote.startsWith(",") || afterQuote.startsWith("}") || afterQuote.startsWith("]")) {
+              valueEndIndex = nextQuote;
+              break;
+            }
+            tempIndex = nextQuote + 1;
+          }
+          
+          if (valueEndIndex !== -1) {
+            let val = cleaned.slice(startIndex, valueEndIndex);
+            // Escape any unescaped double quotes within the value string
+            val = val.replace(/(?<!\\)"/g, '\\"');
+            repairedObj[key] = val;
+          }
+        }
+      }
+      
+      if (repairedObj.category && repairedObj.proposedName) {
+        return repairedObj;
+      }
+    } catch (err) {
+      // Ignore recovery errors and throw original
+    }
+    throw e;
+  }
+}
