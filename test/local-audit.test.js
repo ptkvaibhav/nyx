@@ -14,6 +14,9 @@ test("buildLocalAudit scans only managed roots, skips exclusions, finds duplicat
   await mkdir(path.join(managedRoot, "Resumes"), { recursive: true });
   await mkdir(path.join(managedRoot, "Finance"), { recursive: true });
   await mkdir(excludedRoot, { recursive: true });
+  
+  const excludedWithSuffixRoot = path.join(managedRoot, "Fooocus_win64_2-1-831 (1)");
+  await mkdir(excludedWithSuffixRoot, { recursive: true });
 
   await writeFile(path.join(managedRoot, "Resumes", "John_Resume.pdf"), "resume", "utf8");
   await writeFile(path.join(managedRoot, "Invoice_2025.pdf"), "invoice", "utf8");
@@ -21,6 +24,7 @@ test("buildLocalAudit scans only managed roots, skips exclusions, finds duplicat
   await writeFile(path.join(managedRoot, "Finance", "duplicate-a.pdf"), "same", "utf8");
   await writeFile(path.join(managedRoot, "duplicate-b.pdf"), "same", "utf8");
   await writeFile(path.join(excludedRoot, "ignored.txt"), "ignore-me", "utf8");
+  await writeFile(path.join(excludedWithSuffixRoot, "ignored_too.txt"), "ignore-me-too", "utf8");
 
   await writeFile(
     engagementPath,
@@ -42,6 +46,7 @@ Suggested starter rules:
 ## Default Exclusions
 
 - \`node_modules\`
+- \`Fooocus_win64\`
 
 ## Naming Guidance
 
@@ -67,7 +72,8 @@ Important folder candidates once structure exists:
     "utf8"
   );
 
-  const audit = await buildLocalAudit({ engagementPath });
+  const dbPath = path.join(workspace, ".nyx", "nyx.db");
+  const audit = await buildLocalAudit({ engagementPath, dbPath });
 
   assert.equal(audit.totals.filesScanned, 5);
   assert.equal(audit.totals.duplicateGroups, 1);

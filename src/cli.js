@@ -29,6 +29,7 @@ const DEFAULT_DB_PATH = ".nyx/nyx.db";
 const handlers = {
   plan: printPlan,
   doctor: runDoctor,
+  "setup-ai": runSetupAi,
   demo: runDemo,
   "engagement-summary": runEngagementSummary,
   "audit-local": runAuditLocal,
@@ -60,11 +61,17 @@ async function main() {
     await runDoctor();
     return;
   }
+
+  if (command === "setup-ai") {
+    await runSetupAi();
+    return;
+  }
   
   if (command && command !== "ui") {
     console.log("Nyx has been upgraded to V5! Pure CLI commands are deprecated.");
     console.log("Please run `nyx` without arguments to launch the new interactive AI Web Dashboard.");
     console.log("To check system health, run `nyx doctor`.");
+    console.log("To check local AI readiness, run `nyx setup-ai`.");
     process.exitCode = 1;
     return;
   }
@@ -108,6 +115,22 @@ async function runDoctor() {
   console.log(`- nyx.config.example.json: ${await exists(exampleConfigPath) ? "present" : "missing"}`);
   console.log(`- mock Drive root: ${driveRoot}`);
   console.log(`- engagement file: ${await exists(path.resolve("docs/engagement.md")) ? "present" : "missing"}`);
+
+  console.log("");
+  console.log("AI Status (Ollama):");
+  const aiStatus = await setupOllama();
+  console.log(`- Service running: ${aiStatus.serviceRunning ? "yes" : "no"}`);
+  console.log(`- Configured model (${aiStatus.selectedModel}): ${aiStatus.available ? "installed" : "missing"}`);
+  if (!aiStatus.serviceRunning) {
+    console.log("  (Start Ollama manually to enable local AI support)");
+  } else if (!aiStatus.available) {
+    console.log(`  (Run 'ollama pull ${aiStatus.selectedModel}' to download the model)`);
+  }
+}
+
+async function runSetupAi() {
+  const status = await setupOllama();
+  console.log(JSON.stringify(status, null, 2));
 }
 
 async function runInitDrive() {
@@ -406,20 +429,15 @@ async function runUi(args) {
   const port = parseInt(args[0] ?? "3030", 10);
   const dbPath = args[1] ?? DEFAULT_DB_PATH;
   
-  // Resolve the actual project root directory where the "ui" folder lives
-  // import.meta.url is file:///C:/path/to/nyx/src/cli.js
-  const __dirname = path.dirname(new URL(import.meta.url).pathname).replace(/^\/([A-Za-z]:)/, '$1');
-  const projectRoot = path.resolve(__dirname, "..");
-  const uiDistPath = path.join(projectRoot, "ui", "dist", "index.html");
+  const server = await startServer({ port, dbPath });
+  const address = server.address();
+  const actualPort = typeof address === "object" && address ? address.port : port;
 
-  await setupOllama();
-
-  await startServer({ port, dbPath });
   try {
     const open = (await import("open")).default;
-    await open(`http://localhost:${port}`);
+    await open(`http://localhost:${actualPort}`);
   } catch (err) {
-    console.log(`Open browser automatically failed. Please visit http://localhost:${port}`);
+    console.log(`Open browser automatically failed. Please visit http://localhost:${actualPort}`);
   }
 }
 
@@ -466,6 +484,7 @@ function printUsage() {
   console.log("Commands:");
   console.log("- plan");
   console.log("- doctor");
+  console.log("- setup-ai");
   console.log("- demo");
   console.log("- ui [port] [db-path]");
   console.log("- engagement-summary [engagement-path]");

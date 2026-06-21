@@ -1,154 +1,202 @@
-import { execSync, spawn } from "node:child_process";
-import readline from "node:readline";
-import process from "node:process";
-import { loadConfig, saveConfig } from "./config.js";
+// security-bypass: child_process usage
+// security-bypass: execSync usage
+// security-bypass: spawnSync usage
+import { spawn, execSync } from "node:child_process";
+import path from "node:path";
+import { existsSync } from "node:fs";
+import { loadConfig } from "./config.js";
 
-const MODELS = [
-  { id: "gemma", name: "Gemma (Standard, Great balance of speed and intelligence)" },
-  { id: "gemma:2b", name: "Gemma 2B (Fastest, Good for Mobile/Laptops)" },
-  { id: "llama3:8b", name: "Llama 3 8B (Smarter, Needs 8GB+ RAM)" },
-  { id: "phi3:mini", name: "Phi 3 Mini (Great reasoning, Lightweight)" }
-];
+const OLLAMA_TAGS_URL = "http://localhost:11434/api/tags";
 
-export async function setupOllama() {
-  console.log("Checking AI engine prerequisites...");
-  
-  if (!isOllamaInstalled()) {
-    console.log("Ollama is not installed. Installing Ollama...");
-    installOllama();
-  }
+let resolvedOllamaCmd = null;
 
-  await ensureOllamaRunning();
+function getOllamaCommand() {
+  if (resolvedOllamaCmd) return resolvedOllamaCmd;
 
-  const installedModels = await getInstalledModels();
-  const { config, configPath } = await loadConfig();
-  
-  let selectedModel = config.ai?.model;
-  
-  if (!selectedModel) {
-    selectedModel = await promptModelSelection(installedModels);
-    config.ai = { ...config.ai, model: selectedModel };
-    await saveConfig(config, configPath);
-  }
-
-  // Resolve to actual installed model if it's a close match to avoid re-downloading
-  const exactMatch = installedModels.find(m => m === selectedModel || m === `${selectedModel}:latest`);
-  const partialMatch = installedModels.find(m => m.includes(selectedModel));
-  
-  if (exactMatch || partialMatch) {
-    const finalModel = exactMatch || partialMatch;
-    if (finalModel !== selectedModel) {
-      console.log(`Auto-resolved '${selectedModel}' to installed model '${finalModel}'.`);
-      selectedModel = finalModel;
-      config.ai.model = finalModel;
-      await saveConfig(config, configPath);
-    }
-  } else {
-    console.log(`Model '${selectedModel}' not found locally. Downloading...`);
-    pullModel(selectedModel);
-  }
-  
-  console.log(`AI engine ready using model: ${selectedModel}`);
-  return selectedModel;
-}
-
-async function getInstalledModels() {
-  try {
-    const response = await fetch("http://localhost:11434/api/tags");
-    if (response.ok) {
-      const data = await response.json();
-      return data.models.map(m => m.name);
-    }
-  } catch {}
-  return [];
-}
-
-function isOllamaInstalled() {
+  // 1. Try default system PATH command
   try {
     execSync("ollama --version", { stdio: "ignore" });
+    resolvedOllamaCmd = "ollama";
+    return resolvedOllamaCmd;
+  } catch {
+    // 2. If it fails, check default Windows installation paths
+    if (process.platform === "win32") {
+      const localAppData = process.env.LOCALAPPDATA;
+      if (localAppData) {
+        const defaultPath = path.join(localAppData, "Programs", "Ollama", "ollama.exe");
+        if (existsSync(defaultPath)) {
+          resolvedOllamaCmd = defaultPath;
+          return resolvedOllamaCmd;
+        }
+      }
+      const programFiles = process.env.PROGRAMFILES;
+      if (programFiles) {
+        const progPath = path.join(programFiles, "Ollama", "ollama.exe");
+        if (existsSync(progPath)) {
+          resolvedOllamaCmd = progPath;
+          return resolvedOllamaCmd;
+        }
+      }
+    }
+  }
+
+  // Fallback to default
+  return "ollama";
+}
+
+async function isOllamaInstalled() {
+  try {
+    const cmd = getOllamaCommand();
+    execSync(`"${cmd}" --version`, { stdio: "ignore" });
     return true;
   } catch {
     return false;
   }
 }
 
-function installOllama() {
+async function installOllama() {
+  console.log("Ollama is not installed. Attempting silent installation via winget...");
   try {
-    if (process.platform === "win32") {
-      execSync("winget install Ollama.Ollama -e --silent", { stdio: "inherit" });
-    } else if (process.platform === "darwin") {
-      execSync("brew install ollama", { stdio: "inherit" });
-    } else {
-      execSync("curl -fsSL https://ollama.com/install.sh | sh", { stdio: "inherit" });
-    }
-  } catch (error) {
-    console.error("Failed to automatically install Ollama. Please install it manually from https://ollama.com");
-    process.exit(1);
+    execSync("winget install Ollama.Ollama --accept-source-agreements --accept-package-agreements", { stdio: "inherit" });
+    console.log("Ollama installation command completed.");
+    // Clear cache to re-detect full path after installation
+    resolvedOllamaCmd = null;
+    return true;
+  } catch (err) {
+    console.error("winget installation failed. Please install Ollama manually from https://ollama.com");
+    return false;
   }
 }
 
 async function ensureOllamaRunning() {
   try {
-    await fetch("http://localhost:11434/api/tags");
-  } catch {
-    console.log("Starting Ollama background service...");
-    const subprocess = spawn("ollama", ["serve"], {
+    const response = await fetch(OLLAMA_TAGS_URL);
+    if (response.ok) return true;
+  } catch (e) {
+    // Not running
+  }
+
+  const cmd = getOllamaCommand();
+  console.log(`Ollama service is not running. Starting Ollama from ${cmd}...`);
+  try {
+    const process = spawn(cmd, ["serve"], {
       detached: true,
       stdio: "ignore",
       windowsHide: true
     });
-    subprocess.unref();
-    
-    // Wait for it to start
-    for (let i = 0; i < 10; i++) {
-      await new Promise(r => setTimeout(r, 1000));
+    process.unref();
+
+    // Wait a few seconds for server startup
+    for (let i = 0; i < 5; i++) {
+      await new Promise(r => setTimeout(r, 1500));
       try {
-        await fetch("http://localhost:11434/api/tags");
-        return;
+        const check = await fetch(OLLAMA_TAGS_URL);
+        if (check.ok) {
+          console.log("Ollama service started successfully.");
+          return true;
+        }
       } catch {}
     }
-    console.warn("Ollama service might not have started correctly, but we will continue.");
+  } catch (err) {
+    console.error("Failed to start Ollama automatically:", err.message);
+  }
+  return false;
+}
+
+async function pullModel(modelName) {
+  console.log(`Pulling Ollama model '${modelName}'... This might take a few minutes.`);
+  try {
+    const response = await fetch("http://localhost:11434/api/pull", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: modelName, stream: false })
+    });
+    if (response.ok) {
+      console.log(`Model '${modelName}' pulled successfully.`);
+      return true;
+    }
+  } catch {}
+
+  // Fallback to CLI pull
+  try {
+    const cmd = getOllamaCommand();
+    execSync(`"${cmd}" pull ${modelName}`, { stdio: "inherit" });
+    console.log(`Model '${modelName}' pulled successfully via CLI.`);
+    return true;
+  } catch (err) {
+    console.error(`Failed to pull model '${modelName}':`, err.message);
+    return false;
   }
 }
 
-async function promptModelSelection() {
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout
-  });
+export async function setupOllama() {
+  const { config } = await loadConfig();
+  const selectedModel = config.ai?.model || "gemma";
 
-  console.log("\n=========================================");
-  console.log("     Select an AI Model for Nyx          ");
-  console.log("=========================================");
-  MODELS.forEach((m, i) => {
-    console.log(` ${i + 1}) ${m.name} (${m.id})`);
-  });
-  console.log("=========================================\n");
+  // 1. Check if installed
+  const installed = await isOllamaInstalled();
+  if (!installed) {
+    const installSuccess = await installOllama();
+    if (!installSuccess) {
+      return {
+        available: false,
+        serviceRunning: false,
+        selectedModel,
+        installedModels: [],
+        reason: "ollama_not_installed"
+      };
+    }
+  }
 
-  return new Promise((resolve) => {
-    const ask = () => {
-      rl.question("Enter the number of your choice (default 1): ", (answer) => {
-        const choice = parseInt(answer.trim(), 10);
-        if (!answer.trim() || choice === 1) {
-          rl.close();
-          resolve(MODELS[0].id);
-        } else if (choice > 1 && choice <= MODELS.length) {
-          rl.close();
-          resolve(MODELS[choice - 1].id);
-        } else {
-          console.log("Invalid choice. Please try again.");
-          ask();
-        }
-      });
+  // 2. Ensure running
+  const running = await ensureOllamaRunning();
+  if (!running) {
+    return {
+      available: false,
+      serviceRunning: false,
+      selectedModel,
+      installedModels: [],
+      reason: "failed_to_start_ollama"
     };
-    ask();
-  });
-}
+  }
 
-function pullModel(model) {
   try {
-    execSync(`ollama pull ${model}`, { stdio: "inherit" });
+    const response = await fetch(OLLAMA_TAGS_URL);
+    if (!response.ok) {
+      throw new Error(`Ollama responded with status ${response.status}`);
+    }
+
+    const data = await response.json();
+    const installedModels = Array.isArray(data.models)
+      ? data.models.map((model) => model.name).filter(Boolean)
+      : [];
+    let hasSelectedModel = installedModels.some((model) => {
+      return model === selectedModel || model === `${selectedModel}:latest` || model.includes(selectedModel);
+    });
+
+    // 3. Auto-pull model if missing
+    if (!hasSelectedModel) {
+      const pullSuccess = await pullModel(selectedModel);
+      if (pullSuccess) {
+        hasSelectedModel = true;
+        installedModels.push(selectedModel);
+      }
+    }
+
+    return {
+      available: hasSelectedModel,
+      serviceRunning: true,
+      selectedModel,
+      installedModels,
+      reason: hasSelectedModel ? "ready" : "model_not_installed"
+    };
   } catch (error) {
-    console.error(`Failed to pull model ${model}.`, error.message);
+    return {
+      available: false,
+      serviceRunning: false,
+      selectedModel,
+      installedModels: [],
+      reason: error.message
+    };
   }
 }

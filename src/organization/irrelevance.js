@@ -89,7 +89,7 @@ function buildDuplicateFinding(group) {
   };
 }
 
-function identifyProposedKeepFile(files) {
+export function identifyProposedKeepFile(files) {
   // Score files based on "originality" (lower score is better/more original)
   const scoredFiles = files.map((file) => {
     let score = 0;

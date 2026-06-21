@@ -1,9 +1,13 @@
 import express from "express";
 import path from "node:path";
+import { realpath, access } from "node:fs/promises";
+import { constants } from "node:fs";
 import { Catalog } from "./core/catalog.js";
-import { applyApprovedReview } from "./organization/executor.js";
-import { initAI, askAI } from "./core/ai.js";
+import { applyApprovedReview, rollbackAppliedReview } from "./organization/executor.js";
+import { initAI, askAI, getAIStatus, robustParseJSON } from "./core/ai.js";
 import { buildLocalAudit } from "./organization/local-audit.js";
+import { loadEngagement } from "./engagement/parser.js";
+import { extractContent } from "./core/content-extractor.js";
 
 const DEFAULT_DB_PATH = ".nyx/nyx.db";
 
@@ -27,7 +31,58 @@ export async function startServer({ port = 3030, dbPath = DEFAULT_DB_PATH } = {}
   // API Routes
   
   let currentScanProgress = { current: 0, total: 0, file: "", status: "idle" };
-  let scanAbortController = null;
+  let scanCancelled = false;
+
+  app.get("/api/health", async (req, res) => {
+    try {
+      const managedRoots = await getManagedRoots();
+      
+      const __dirname = path.dirname(new URL(import.meta.url).pathname).replace(/^\/([A-Za-z]:)/, '$1');
+      const uiIndexPath = path.join(__dirname, "..", "ui", "dist", "index.html");
+      let uiBuilt = false;
+      try {
+        await access(uiIndexPath, constants.F_OK);
+        uiBuilt = true;
+      } catch {}
+
+      const aiStatus = getAIStatus();
+      // If AI is not available, trigger initialization asynchronously in the background
+      if (!aiStatus.available) {
+        initAI().catch(err => {
+          if (process.env.NODE_ENV !== "test" && !process.env.NODE_TEST_CONTEXT) {
+            console.error("Background AI auto-recovery check failed:", err.message);
+          }
+        });
+      }
+
+      res.json({
+        ok: true,
+        dbPath: path.resolve(dbPath),
+        ai: aiStatus,
+        managedRoots,
+        uiBuilt
+      });
+    } catch (error) {
+      res.status(500).json({
+        ok: false,
+        error: error.message,
+        ai: getAIStatus()
+      });
+    }
+  });
+
+  app.post("/api/ai/recheck", async (req, res) => {
+    try {
+      const aiStatus = await initAI();
+      res.json({ ok: true, ai: aiStatus });
+    } catch (error) {
+      res.status(500).json({
+        ok: false,
+        error: error.message,
+        ai: getAIStatus()
+      });
+    }
+  });
 
   app.get("/api/scan/progress", (req, res) => {
     res.json(currentScanProgress);
@@ -37,11 +92,30 @@ export async function startServer({ port = 3030, dbPath = DEFAULT_DB_PATH } = {}
     const { directory, skippedFiles } = req.body;
     if (!directory) return res.status(400).json({ error: "Directory path required" });
 
+    // Parse target paths: can be single string, array, or comma-separated string
+    const inputPaths = Array.isArray(directory)
+      ? directory
+      : typeof directory === "string"
+        ? directory.split(",").map(p => p.trim()).filter(Boolean)
+        : [];
+
+    if (inputPaths.length === 0) {
+      return res.status(400).json({ error: "No valid directory or file paths provided" });
+    }
+
+    let resolvedPaths;
+    try {
+      resolvedPaths = await Promise.all(inputPaths.map(p => getSafePath(p)));
+    } catch (error) {
+      return res.status(400).json({ error: `Path resolution failed: ${error.message}` });
+    }
+
     // Prevent multiple concurrent scans for now
-    if (currentScanProgress.status === "running") {
+    if (currentScanProgress.status === "running" || currentScanProgress.status === "discovering") {
       return res.status(409).json({ error: "A scan is already in progress" });
     }
 
+    scanCancelled = false;
     currentScanProgress = { current: 0, total: 0, file: "", status: "running" };
 
     // Fire and forget the scan job
@@ -49,17 +123,22 @@ export async function startServer({ port = 3030, dbPath = DEFAULT_DB_PATH } = {}
       try {
         const audit = await buildLocalAudit({ 
           dbPath,
-          targetDirectory: directory,
+          targetDirectory: resolvedPaths, // Pass array of resolved target paths
           skippedFiles: skippedFiles || [],
+          isCancelled: () => scanCancelled,
           onDiscovery: (count, path) => {
+             if (scanCancelled) return;
              currentScanProgress = { current: count, total: 0, file: path, status: "discovering" };
           },
           onProgress: (current, total, file) => {
+             if (scanCancelled) return;
              currentScanProgress = { current, total, file, status: "running" };
           }
         });
 
-        if (audit.needsPassword) {
+        if (scanCancelled) {
+          currentScanProgress.status = "cancelled";
+        } else if (audit.needsPassword) {
           currentScanProgress.status = "needs_password";
           currentScanProgress.passwordFile = audit.passwordFile;
         } else {
@@ -67,12 +146,18 @@ export async function startServer({ port = 3030, dbPath = DEFAULT_DB_PATH } = {}
         }
       } catch (error) {
         console.error("Background Scan Error:", error);
-        currentScanProgress.status = "failed";
+        currentScanProgress.status = scanCancelled ? "cancelled" : "failed";
         currentScanProgress.error = error.message;
       }
     })();
 
     res.json({ success: true, message: "Scan started in background" });
+  });
+
+  app.post("/api/scan/cancel", (req, res) => {
+    scanCancelled = true;
+    currentScanProgress.status = "cancelled";
+    res.json({ success: true, message: "Scan cancellation requested" });
   });
 
   app.post("/api/add-password", async (req, res) => {
@@ -117,20 +202,107 @@ export async function startServer({ port = 3030, dbPath = DEFAULT_DB_PATH } = {}
   });
 
   app.get("/api/select-directory", async (req, res) => {
+    res.status(501).json({
+      error: "Native folder selection is not enabled. Enter an approved local path manually.",
+      managedRoots: await getManagedRoots()
+    });
+  });
+
+  app.get("/api/browse-directory", async (req, res) => {
     try {
-      const { execSync } = await import("node:child_process");
-      const script = `
-        Add-Type -AssemblyName System.windows.forms
-        $f = New-Object System.Windows.Forms.FolderBrowserDialog
-        $f.ShowNewFolderButton = $false
-        if ($f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
-          Write-Output $f.SelectedPath
+      const dirPath = req.query.path || "";
+      const managedRoots = await getManagedRoots();
+      const fs = await import("node:fs/promises");
+      const os = await import("node:os");
+
+      if (!dirPath) {
+        // Return drives, home folder, and managed roots as shortcuts
+        const homedir = os.homedir().replaceAll("\\", "/");
+        const drives = ["C:", "D:", "E:", "F:"];
+        const availableDrives = [];
+        
+        for (const drive of drives) {
+          try {
+            await access(`${drive}/`, constants.F_OK);
+            availableDrives.push(`${drive}/`);
+          } catch {}
         }
-      `;
-      const result = execSync(`powershell.exe -NoProfile -Command "${script.replace(/\n/g, '; ')}"`, { encoding: 'utf8' }).trim();
-      res.json({ directory: result });
-    } catch (e) {
-      res.status(500).json({ error: e.message });
+
+        const entries = [];
+        
+        // Add Managed Roots
+        for (const root of managedRoots) {
+          entries.push({
+            name: `⭐ Approved Root: ${path.basename(root) || root}`,
+            path: root.replaceAll("\\", "/"),
+            isDirectory: true
+          });
+        }
+
+        // Add Home folder
+        entries.push({
+          name: `🏠 Home (${homedir})`,
+          path: homedir,
+          isDirectory: true
+        });
+
+        // Add Drives
+        for (const drive of availableDrives) {
+          entries.push({
+            name: `💾 Drive (${drive})`,
+            path: drive,
+            isDirectory: true
+          });
+        }
+
+        return res.json({
+          currentPath: "",
+          isRoot: true,
+          entries
+        });
+      }
+
+      const targetPath = await getSafePath(dirPath);
+      const files = await fs.readdir(targetPath, { withFileTypes: true });
+      
+      const entries = files
+        .filter(f => !f.name.startsWith("."))
+        .map(f => ({
+          name: f.name,
+          path: path.join(targetPath, f.name).replaceAll("\\", "/"),
+          isDirectory: f.isDirectory()
+        }))
+        .sort((a, b) => {
+          if (a.isDirectory && !b.isDirectory) return -1;
+          if (!a.isDirectory && b.isDirectory) return 1;
+          return a.name.localeCompare(b.name);
+        });
+
+      const parentDir = path.dirname(targetPath);
+      const isDriveRoot = targetPath === parentDir || targetPath.endsWith(":/") || targetPath.endsWith(":/");
+
+      res.json({
+        currentPath: targetPath.replaceAll("\\", "/"),
+        parentPath: isDriveRoot ? "" : parentDir.replaceAll("\\", "/"),
+        isRoot: isDriveRoot,
+        entries
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/open-file", async (req, res) => {
+    try {
+      const filePath = req.query.path;
+      if (!filePath) return res.status(400).send("Path is required");
+      const managedRoots = await getManagedRoots();
+      const absolutePath = await getSafePath(filePath, managedRoots);
+      const open = (await import("open")).default;
+      await open(absolutePath);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(error.statusCode ?? 500).json({ error: error.message });
     }
   });
 
@@ -141,17 +313,17 @@ export async function startServer({ port = 3030, dbPath = DEFAULT_DB_PATH } = {}
         return res.status(400).send("Path is required");
       }
       
-      const fs = await import("node:fs/promises");
-      const absolutePath = path.resolve(filePath);
+      const managedRoots = await getManagedRoots();
+      const absolutePath = await getSafePath(filePath, managedRoots);
       
       try {
-        await fs.access(absolutePath);
+        await access(absolutePath, constants.F_OK);
         res.sendFile(absolutePath);
       } catch {
         res.status(404).send("File not found");
       }
     } catch (error) {
-      res.status(500).send(error.message);
+      res.status(error.statusCode ?? 500).send(error.message);
     }
   });
 
@@ -188,21 +360,50 @@ Give me ONLY a raw JSON string like {"exclusions": ["folder1"], "reasoning": "wh
   app.post("/api/ai/rename", async (req, res) => {
     try {
       const { fileInfo, subjectPath } = req.body;
-      const file = catalog.getFileByPath(subjectPath);
-      const textSample = file?.extractedText ? file.extractedText.slice(0, 800) : "No text available.";
+      const file = subjectPath ? catalog.getFileByPath(subjectPath) : null;
       
-      const prompt = `I have a file named "${fileInfo.currentName}" with category "${fileInfo.category}" and purpose "${fileInfo.purpose}".
+      if (file?.proposedName && file?.aiReasoning) {
+        res.json({
+          proposedName: file.proposedName,
+          reasoning: file.aiReasoning
+        });
+        return;
+      }
+      
+      let extractedText = file?.extractedText;
+      if (!extractedText && subjectPath) {
+        try {
+          extractedText = await extractContent(subjectPath);
+        } catch (e) {
+          console.warn("Failed to extract content on demand for AI rename:", e.message);
+        }
+      }
+      
+      const textSample = extractedText ? extractedText.slice(0, 1000) : "No text available.";
+      const fileRelativePath = file?.relativePath || subjectPath || fileInfo.currentName;
+      const currentName = fileInfo.currentName || (subjectPath ? path.basename(subjectPath) : "unknown");
+
+      const prompt = extractedText && extractedText.length > 50
+        ? `I have a file named "${currentName}" with category "${fileInfo.category}" and purpose "${fileInfo.purpose}".
+It is located at: "${fileRelativePath}"
 Here is a sample of its extracted text content:
 ---
 ${textSample}
 ---
-Analyze the text to determine exactly what this file is (e.g. Bank Statement, Aadhaar Card, Offer Letter, etc.) and who it belongs to if applicable.
+Analyze the text, file name, and path to determine exactly what this file is (e.g. Bank Statement, Aadhaar Card, Offer Letter, etc.) and who it belongs to if applicable.
 Propose a highly descriptive and structured file name. Use Spaces, Title Case, and clear descriptors (e.g., "Pratik Vaibhav - Aadhaar Card.pdf" or "HDFC Bank Statement - Jan 2024.pdf").
-Do not just return the original name or "document_123.pdf".
+Do not include the extension in the proposed name unless you match the original one.
+Return ONLY a raw JSON string like {"proposedName": "New Name.pdf", "reasoning": "why"}. No markdown.`
+        : `I have a file named "${currentName}" with category "${fileInfo.category}" and purpose "${fileInfo.purpose}".
+It is located at: "${fileRelativePath}"
+Analyze the file name, extension, and parent folder path to determine exactly what this file is.
+Propose a highly descriptive and structured file name. Use Spaces, Title Case, and clear descriptors.
+Do not include the extension in the proposed name unless you match the original one.
 Return ONLY a raw JSON string like {"proposedName": "New Name.pdf", "reasoning": "why"}. No markdown.`;
-      const aiResponse = await askAI(prompt, "You are a highly intelligent file renaming assistant. You must analyze the text content to extract the semantic meaning of the document and propose a human-readable, descriptive name.");
-      const clean = cleanJSON(aiResponse);
-      res.json(JSON.parse(clean));
+
+      const aiResponse = await askAI(prompt, "You are a highly intelligent file renaming assistant. You must analyze the text content and path context to extract the semantic meaning of the document and propose a human-readable, descriptive name.");
+      const parsed = robustParseJSON(aiResponse);
+      res.json(parsed);
     } catch (error) {
       res.status(500).json({ error: error.message, reasoning: "AI parsing failed" });
     }
@@ -278,6 +479,15 @@ Return ONLY a raw JSON string like {"proposedName": "New Name.pdf", "reasoning":
     }
   });
 
+  app.post("/api/rollback", async (req, res) => {
+    try {
+      const result = await rollbackAppliedReview({ catalog });
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Serve UI static files
   const __dirname = path.dirname(new URL(import.meta.url).pathname).replace(/^\/([A-Za-z]:)/, '$1');
   const uiPath = path.join(__dirname, "..", "ui", "dist");
@@ -300,8 +510,38 @@ Return ONLY a raw JSON string like {"proposedName": "New Name.pdf", "reasoning":
 
   return new Promise((resolve) => {
     const server = app.listen(port, () => {
-      console.log(`Nyx Dashboard running at http://localhost:${port}`);
+      const address = server.address();
+      const actualPort = typeof address === "object" && address ? address.port : port;
+      console.log(`Nyx Dashboard running at http://localhost:${actualPort}`);
       resolve(server);
     });
   });
+}
+
+async function getManagedRoots() {
+  const engagement = await loadEngagement("docs/engagement.md");
+  return engagement.managedDirectories.map((root) => path.resolve(root));
+}
+
+function assertInsideManagedRoots(targetPath, managedRoots) {
+  const insideManagedRoot = managedRoots.some((rootPath) => {
+    const relativePath = path.relative(rootPath, targetPath);
+    return relativePath === "" || (!relativePath.startsWith("..") && !path.isAbsolute(relativePath));
+  });
+
+  if (!insideManagedRoot) {
+    const error = new Error(`Path is outside approved managed directories: ${targetPath}`);
+    error.statusCode = 403;
+    throw error;
+  }
+}
+
+async function getSafePath(filePath) {
+  let resolvedPath = path.resolve(filePath);
+  try {
+    resolvedPath = await realpath(resolvedPath);
+  } catch {
+    // If file doesn't exist, realpath throws. We fallback to path.resolve.
+  }
+  return resolvedPath;
 }

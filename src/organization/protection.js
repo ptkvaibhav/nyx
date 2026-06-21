@@ -25,11 +25,12 @@ const LOWER_PRIORITY_CATEGORIES = new Set(["archive", "other"]);
 export async function buildProtectionPlan({
   engagementPath = "docs/engagement.md",
   configPath = "nyx.config.json",
+  dbPath = ".nyx/nyx.db",
   requiredRemoteCopies = 1
 } = {}) {
   const [engagement, audit, configContext] = await Promise.all([
     loadEngagement(engagementPath),
-    buildLocalAudit({ engagementPath }),
+    buildLocalAudit({ engagementPath, dbPath }),
     loadConfig(configPath)
   ]);
   const driveRoot = path.resolve(configContext.baseDirectory, configContext.config.mockDrive.rootFolder);
