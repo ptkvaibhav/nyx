@@ -1,9 +1,8 @@
 import { constants } from "node:fs";
-import { access, appendFile, mkdir, rename, unlink, readdir, rmdir, stat } from "node:fs/promises";
+import { access, appendFile, mkdir, rename, readdir, rmdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { fingerprintFile } from "../core/fingerprint.js";
 import { loadEngagement } from "../engagement/parser.js";
-import { loadReviewManifest, writeReviewManifest } from "./review-store.js";
 import { hasVerifiedBackupProof } from "./protection.js";
 
 const DEFAULT_AUDIT_LOG_PATH = ".nyx/audit-log.jsonl";
@@ -13,8 +12,8 @@ export async function applyApprovedReview({
   engagementPath = "docs/engagement.md", 
   auditLogPath = DEFAULT_AUDIT_LOG_PATH 
 } = {}) {
-  const engagement = await loadEngagement(engagementPath);
-  const managedRoots = engagement.managedDirectories.map((root) => path.resolve(root));
+  const { managedDirectories } = await loadEngagement(engagementPath);
+  const managedRoots = managedDirectories.map((root) => path.resolve(root));
   
   const allPendingItems = catalog.getPendingReviewItems();
   const approvedItems = sortApprovedReviewItems(
@@ -79,8 +78,8 @@ export async function rollbackAppliedReview({
   engagementPath = "docs/engagement.md",
   auditLogPath = DEFAULT_AUDIT_LOG_PATH
 } = {}) {
-  const engagement = await loadEngagement(engagementPath);
-  const managedRoots = engagement.managedDirectories.map((root) => path.resolve(root));
+  const { managedDirectories } = await loadEngagement(engagementPath);
+  const managedRoots = managedDirectories.map((root) => path.resolve(root));
   
   // Get all applied items
   const rawApplied = catalog.db.prepare("SELECT * FROM review_items WHERE status = 'applied'").all().map(row => {
@@ -157,11 +156,13 @@ function sortRollbackItems(items) {
 }
 
 async function executeRollback({ rollbackAction, managedRoots }) {
-  if (rollbackAction.action === "move_path") {
-    const fromPath = path.resolve(rollbackAction.from);
-    const toPath = path.resolve(rollbackAction.to);
+  if (rollbackAction.action === "move_path" || rollbackAction.action === "restore_from_backup" || rollbackAction.action === "restore_archive") {
+    const fromPath = path.resolve(rollbackAction.from || rollbackAction.quarantinePath);
+    const toPath = path.resolve(rollbackAction.to || rollbackAction.originalPath);
 
-    assertInsideManagedRoots(fromPath, managedRoots);
+    if (rollbackAction.action === "move_path") {
+      assertInsideManagedRoots(fromPath, managedRoots);
+    }
     assertInsideManagedRoots(toPath, managedRoots);
 
     if (await exists(toPath)) {
@@ -171,28 +172,11 @@ async function executeRollback({ rollbackAction, managedRoots }) {
     await mkdir(path.dirname(toPath), { recursive: true });
     await rename(fromPath, toPath);
 
-    return {
-      action: "rolled_back_move",
-      from: fromPath,
-      to: toPath
-    };
-  }
-
-  if (rollbackAction.action === "restore_from_backup") {
-    const fromPath = path.resolve(rollbackAction.from);
-    const toPath = path.resolve(rollbackAction.to);
-
-    assertInsideManagedRoots(toPath, managedRoots);
-
-    if (await exists(toPath)) {
-      throw new Error(`Rollback target path already exists: ${toPath}`);
-    }
-
-    await mkdir(path.dirname(toPath), { recursive: true });
-    await rename(fromPath, toPath);
+    const actionResultName = rollbackAction.action === "move_path" ? "rolled_back_move" :
+                             rollbackAction.action === "restore_from_backup" ? "restored_from_backup" : "rolled_back_archive";
 
     return {
-      action: "restored_from_backup",
+      action: actionResultName,
       from: fromPath,
       to: toPath
     };
@@ -216,26 +200,6 @@ async function executeRollback({ rollbackAction, managedRoots }) {
     return {
       action: "rolled_back_duplicates",
       details: rollbackAction.restoredFromPaths
-    };
-  }
-
-  if (rollbackAction.action === "restore_archive") {
-    const fromPath = path.resolve(rollbackAction.quarantinePath);
-    const toPath = path.resolve(rollbackAction.originalPath);
-
-    assertInsideManagedRoots(toPath, managedRoots);
-
-    if (await exists(toPath)) {
-      throw new Error(`Rollback target path already exists: ${toPath}`);
-    }
-
-    await mkdir(path.dirname(toPath), { recursive: true });
-    await rename(fromPath, toPath);
-
-    return {
-      action: "rolled_back_archive",
-      from: fromPath,
-      to: toPath
     };
   }
 

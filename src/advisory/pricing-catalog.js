@@ -1,11 +1,4 @@
-export const pricingCatalogShape = {
-  asOf: "YYYY-MM-DD",
-  providers: {
-    googleDrive: [],
-    oneDrive: [],
-    github: []
-  }
-};
+
 
 export function explainPricingStrategy() {
   return [

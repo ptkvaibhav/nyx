@@ -422,12 +422,13 @@ function App() {
   const isFolderClean = stats && stats.pendingItems === 0;
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex font-sans">
+    <div className="min-h-screen text-slate-100 flex font-sans selection:bg-sky-500/30 selection:text-sky-200">
       {/* Sidebar Wizard Navigation */}
-      <div className="w-72 border-r border-slate-800 p-6 flex flex-col gap-8 bg-slate-900/50">
-        <div className="flex items-center gap-3 px-2">
-          <div className="w-8 h-8 bg-sky-500 rounded rotate-45 flex items-center justify-center shadow-lg shadow-sky-500/20">
-            <Layout className="-rotate-45 w-5 h-5 text-white" />
+      <div className="w-72 border-r border-slate-800/50 p-6 flex flex-col gap-8 glass-panel z-10 relative">
+        <div className="absolute inset-0 bg-gradient-to-b from-sky-500/5 to-transparent opacity-50 pointer-events-none"></div>
+        <div className="flex items-center gap-3 px-2 relative">
+          <div className="w-10 h-10 bg-gradient-to-br from-sky-400 to-indigo-500 rounded-xl rotate-3 flex items-center justify-center shadow-lg shadow-sky-500/30 border border-sky-300/20 group-hover:rotate-12 transition-all duration-300">
+            <Layout className="w-5 h-5 text-white shadow-sm" />
           </div>
           <span className="font-bold text-xl tracking-tight">Nyx AI</span>
         </div>
@@ -448,7 +449,7 @@ function App() {
               disabled={!stats && s > 2}
               className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all text-left font-medium ${step === s ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20 shadow-inner' : 'hover:bg-slate-800 text-slate-400 disabled:opacity-30 disabled:cursor-not-allowed'}`}
             >
-              <Icon className={`w-5 h-5 ${step === s && s === 2 && scanning ? 'animate-spin' : ''}`} /> 
+              <Icon className={`w-5 h-5 ${step === s && s === 2 && scanning ? 'animate-spin' : ''} transition-transform group-hover:scale-110`} /> 
               {label}
             </button>
           ))}
@@ -456,29 +457,32 @@ function App() {
       </div>
 
       {/* Main Content */}
-      <main className="flex-1 p-10 overflow-y-auto relative bg-gradient-to-br from-slate-950 to-slate-900">
+      <main className="flex-1 p-10 overflow-y-auto relative bg-transparent scroll-smooth">
         {step === 1 && (
-          <div className="max-w-2xl mx-auto mt-20 flex flex-col gap-6">
+          <div className="max-w-2xl mx-auto mt-20 flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-8 duration-700 ease-out">
             <div className="text-center">
-              <h1 className="text-4xl font-bold mb-4 tracking-tight">What would you like to organize?</h1>
-              <p className="text-slate-400 text-lg">Enter an approved managed directory. Nyx will refuse paths outside the engagement scope.</p>
+              <h1 className="text-4xl sm:text-5xl font-extrabold mb-6 tracking-tight text-gradient">What would you like to organize?</h1>
+              <p className="text-slate-400 text-lg max-w-xl mx-auto leading-relaxed">Enter an approved managed directory. Nyx will refuse paths outside the engagement scope.</p>
             </div>
             
-            <div className="bg-slate-900/80 border border-slate-800 p-8 rounded-2xl shadow-xl backdrop-blur-sm mt-4">
-              <label className="block text-sm font-semibold text-slate-400 mb-2">TARGET DIRECTORY</label>
-              <div className="flex gap-3">
-                <input 
-                  type="text" 
-                  value={directory} 
-                  onChange={(e) => setDirectory(e.target.value)}
-                  className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-slate-100 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-all font-mono text-sm"
-                  placeholder="C:\Path\To\Your\Files"
-                />
+            <div className="glass-card p-8 rounded-2xl mt-4 relative overflow-hidden group">
+              <div className="absolute inset-0 bg-gradient-to-br from-sky-500/5 to-indigo-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+              <label className="block text-xs font-bold text-slate-400 mb-3 tracking-widest uppercase">Target Directory</label>
+              <div className="flex flex-col sm:flex-row gap-3 relative z-10">
+                <div className="flex-1 animated-border rounded-xl">
+                  <input 
+                    type="text" 
+                    value={directory} 
+                    onChange={(e) => setDirectory(e.target.value)}
+                    className="w-full bg-slate-950/40 border border-slate-700/50 rounded-xl px-4 py-3.5 text-slate-100 focus:outline-none focus:bg-slate-950/60 transition-all font-mono text-sm shadow-inner"
+                    placeholder="C:\Path\To\Your\Files"
+                  />
+                </div>
                 <button 
                   onClick={openDirectoryPicker}
-                  className="bg-slate-800 hover:bg-slate-700 border border-slate-700 px-5 py-3 rounded-xl font-semibold transition-all flex items-center gap-2"
+                  className="bg-slate-800/50 hover:bg-slate-700/60 border border-slate-700/50 px-6 py-3.5 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 backdrop-blur-md shadow-sm"
                 >
-                  <FolderOpen className="w-4 h-4" /> Browse
+                  <FolderOpen className="w-4 h-4 text-sky-400" /> Browse
                 </button>
               </div>
 
@@ -531,14 +535,16 @@ function App() {
               
               <button 
                 onClick={() => startScan()}
-                className="w-full mt-6 bg-sky-600 hover:bg-sky-500 text-white py-4 rounded-xl font-bold transition-all shadow-lg shadow-sky-900/30 flex items-center justify-center gap-2"
+                className="w-full mt-8 btn-primary text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 text-lg shadow-lg group relative overflow-hidden"
               >
-                <Sparkles className="w-5 h-5" /> Analyze with AI
+                <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out"></div>
+                <Sparkles className="w-5 h-5 relative z-10" /> 
+                <span className="relative z-10">Analyze with AI</span>
               </button>
               
               <button 
                 onClick={rollbackChanges}
-                className="w-full mt-3 bg-slate-900 hover:bg-slate-800 text-slate-400 border border-slate-800 py-3 rounded-xl font-semibold transition-all flex items-center justify-center gap-2"
+                className="w-full mt-3 bg-slate-900/40 hover:bg-slate-800/60 text-slate-400 border border-slate-800/50 py-3 rounded-xl font-semibold transition-all flex items-center justify-center gap-2"
               >
                 <RefreshCw className="w-4 h-4" /> Rollback Last Session
               </button>
@@ -547,41 +553,43 @@ function App() {
         )}
 
         {step === 2 && (
-          <div className="flex flex-col items-center justify-center h-full gap-6">
+          <div className="flex flex-col items-center justify-center h-full gap-6 animate-in zoom-in-95 duration-500">
             {needsPassword ? (
-              <div className="bg-slate-900 border border-slate-800 p-8 rounded-2xl shadow-xl max-w-md w-full text-center">
-                 <div className="w-16 h-16 bg-amber-500/20 rounded-full flex items-center justify-center border border-amber-500/50 mx-auto mb-6">
+              <div className="glass-card p-8 rounded-2xl w-full max-w-md text-center">
+                 <div className="w-16 h-16 bg-amber-500/10 rounded-full flex items-center justify-center border border-amber-500/30 mx-auto mb-6 shadow-lg shadow-amber-500/10">
                     <KeyRound className="w-8 h-8 text-amber-400" />
                  </div>
-                 <h2 className="text-2xl font-bold mb-2">Password Required</h2>
+                 <h2 className="text-2xl font-bold mb-2 text-white">Password Required</h2>
                  <p className="text-slate-400 mb-2">Nyx encountered a password-protected PDF during extraction:</p>
-                 <p className="text-sky-400 font-mono text-sm mb-6 break-all bg-slate-950 p-3 rounded-lg border border-slate-800" title={passwordFile}>{passwordFile.split('\\').pop()}</p>
-                 <input 
-                   type="password" 
-                   value={pdfPassword}
-                   onChange={e => setPdfPassword(e.target.value)}
-                   className={`w-full bg-slate-950 border ${passwordError ? 'border-rose-500 focus:ring-rose-500' : 'border-slate-700 focus:border-amber-500 focus:ring-amber-500'} rounded-xl px-4 py-3 text-center text-xl tracking-widest focus:outline-none focus:ring-1 mb-2`}
-                   placeholder="••••••••"
-                 />
-                 {passwordError && <p className="text-rose-500 text-sm font-bold mb-4">{passwordError}</p>}
+                 <p className="text-sky-400 font-mono text-sm mb-6 break-all bg-slate-950/60 p-3 rounded-xl border border-slate-800/50 shadow-inner" title={passwordFile}>{passwordFile.split('\\').pop()}</p>
+                 <div className="animated-border rounded-xl mb-4">
+                   <input 
+                     type="password" 
+                     value={pdfPassword}
+                     onChange={e => setPdfPassword(e.target.value)}
+                     className={`w-full bg-slate-950/40 border ${passwordError ? 'border-rose-500/50 focus:border-rose-400' : 'border-slate-700/50 focus:bg-slate-950/60'} rounded-xl px-4 py-3.5 text-center text-xl tracking-widest focus:outline-none transition-all`}
+                     placeholder="••••••••"
+                   />
+                 </div>
+                 {passwordError && <p className="text-rose-400 text-sm font-bold mb-4">{passwordError}</p>}
                  <div className="flex gap-4 mt-2">
-                   <button onClick={submitPassword} className="flex-1 bg-amber-600 hover:bg-amber-500 text-white font-bold py-3 rounded-xl transition-all text-sm">
+                   <button onClick={submitPassword} className="flex-1 bg-gradient-to-r from-amber-600 to-orange-500 hover:from-amber-500 hover:to-orange-400 text-white font-bold py-3 rounded-xl transition-all text-sm shadow-lg shadow-amber-500/20">
                      Save & Continue
                    </button>
-                   <button onClick={skipPassword} className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-3 rounded-xl transition-all border border-slate-700 text-sm">
-                     Skip & Continue
+                   <button onClick={skipPassword} className="flex-1 glass-card hover:bg-slate-800/80 text-slate-300 font-bold py-3 rounded-xl transition-all text-sm">
+                     Skip
                    </button>
                  </div>
-                 <p className="text-xs text-slate-500 mt-4">Passwords are securely stored in your local configuration file and never sent to the cloud.</p>
+                 <p className="text-xs text-slate-500 mt-5">Passwords are securely stored locally.</p>
               </div>
             ) : (
-              <div className="flex flex-col items-center max-w-md w-full text-center gap-6">
-                <div className="relative mb-4">
-                  <div className="absolute inset-0 bg-sky-500/20 blur-xl rounded-full"></div>
-                  <RefreshCw className="w-16 h-16 animate-spin text-sky-500 relative z-10" />
+              <div className="flex flex-col items-center max-w-md w-full text-center gap-6 glass-card p-10 rounded-3xl">
+                <div className="relative mb-2 group">
+                  <div className="absolute inset-0 bg-sky-500/30 blur-2xl rounded-full group-hover:bg-sky-400/40 transition-colors duration-500"></div>
+                  <RefreshCw className="w-16 h-16 animate-spin text-sky-400 relative z-10" />
                 </div>
-                <h2 className="text-3xl font-bold tracking-tight">Analyzing Directory...</h2>
-                <p className="text-slate-400 text-lg mb-2">Nyx is currently fingerprinting files and extracting semantic context.</p>
+                <h2 className="text-3xl font-extrabold tracking-tight text-gradient">Analyzing Directory...</h2>
+                <p className="text-slate-400 text-base mb-2 leading-relaxed">Nyx is fingerprinting files and extracting semantic context using advanced AI heuristics.</p>
                 
                 {scanProgress.status === "discovering" && (
                   <div className="w-full bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-inner">
@@ -627,14 +635,14 @@ function App() {
         )}
 
         {step === 3 && (
-          <div className="flex flex-col gap-6 max-w-5xl mx-auto">
-            <header className="flex justify-between items-end border-b border-slate-800 pb-6">
+          <div className="flex flex-col gap-8 max-w-5xl mx-auto animate-in fade-in slide-in-from-bottom-8 duration-700">
+            <header className="flex flex-col sm:flex-row justify-between items-start sm:items-end border-b border-slate-800/50 pb-6 gap-4">
               <div>
-                <h1 className="text-4xl font-bold flex items-center gap-3 tracking-tight"><Sparkles className="text-amber-400 w-8 h-8"/> AI Exclusions Review</h1>
+                <h1 className="text-4xl sm:text-5xl font-extrabold flex items-center gap-4 tracking-tight text-gradient"><Sparkles className="text-amber-400 w-10 h-10 drop-shadow-md"/> AI Exclusions</h1>
                 <p className="text-slate-400 mt-2 text-lg">Nyx AI has identified directories that should be skipped. Uncheck any you want to scan.</p>
               </div>
-              <button onClick={() => setStep(4)} className="bg-white text-slate-950 font-bold px-6 py-3 rounded-xl flex items-center gap-2 hover:bg-slate-200 transition-all shadow-lg">
-                Continue <ArrowRight className="w-4 h-4"/>
+              <button onClick={() => setStep(4)} className="btn-primary text-white font-bold px-8 py-3.5 rounded-xl flex items-center gap-3 shadow-lg shadow-sky-500/20 group text-lg shrink-0">
+                Continue <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform"/>
               </button>
             </header>
 
@@ -652,9 +660,10 @@ function App() {
                    </div>
                 )}
 
-                <div className="bg-slate-900/80 border border-slate-800 p-8 rounded-2xl shadow-xl">
+                <div className="glass-card p-8 rounded-3xl shadow-xl mt-2 border border-slate-700/50">
                   <h3 className="font-semibold text-xl text-amber-400 mb-4 flex items-center gap-2"><Layout className="w-5 h-5"/> AI Reasoning</h3>
-                  <div className="p-6 bg-amber-500/5 border border-amber-500/10 rounded-xl mb-8">
+                  <div className="p-6 bg-amber-500/10 border border-amber-500/20 rounded-xl mb-8 shadow-inner relative overflow-hidden">
+                    <div className="absolute top-0 left-0 w-1 h-full bg-amber-500"></div>
                     <p className="text-slate-300 italic text-lg leading-relaxed">"{aiExclusions.reasoning}"</p>
                   </div>
                   
@@ -683,14 +692,14 @@ function App() {
         )}
 
         {step === 4 && (
-          <div className="flex flex-col gap-6 max-w-5xl mx-auto">
-            <header className="flex justify-between items-end border-b border-slate-800 pb-6">
+          <div className="flex flex-col gap-8 max-w-5xl mx-auto animate-in fade-in slide-in-from-bottom-8 duration-700">
+            <header className="flex flex-col sm:flex-row justify-between items-start sm:items-end border-b border-slate-800/50 pb-6 gap-4">
               <div>
-                <h1 className="text-4xl font-bold tracking-tight">Duplicates Resolver</h1>
+                <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight text-gradient">Duplicates Resolver</h1>
                 <p className="text-slate-400 mt-2 text-lg">Intelligent cleanup prioritizing original files over copy suffixes.</p>
               </div>
-              <button onClick={() => setStep(5)} className="bg-white text-slate-950 font-bold px-6 py-3 rounded-xl flex items-center gap-2 hover:bg-slate-200 transition-all shadow-lg">
-                Next: Smart Renaming <ArrowRight className="w-4 h-4"/>
+              <button onClick={() => setStep(5)} className="btn-primary text-white font-bold px-8 py-3.5 rounded-xl flex items-center gap-3 shadow-lg shadow-sky-500/20 group text-lg shrink-0">
+                Next: Smart Renaming <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform"/>
               </button>
             </header>
 
@@ -738,8 +747,8 @@ function App() {
 
             <div className="flex flex-col gap-6 mt-4">
               {items.filter(i => i.action === 'review_duplicate_deletion').map(item => (
-                <div key={item.id} className="bg-slate-900/80 border border-slate-800 rounded-2xl overflow-hidden shadow-lg">
-                   <div className="bg-slate-800/40 px-6 py-4 border-b border-slate-800 flex justify-between items-center">
+                <div key={item.id} className="glass-card rounded-2xl overflow-hidden shadow-xl hover:shadow-2xl hover:border-slate-700/50 transition-all group">
+                   <div className="bg-slate-900/60 px-6 py-4 border-b border-slate-800/50 flex justify-between items-center backdrop-blur-sm">
                       <div className="flex items-center gap-3">
                         <input 
                           type="checkbox"
@@ -812,28 +821,28 @@ function App() {
         )}
 
         {step === 5 && (
-          <div className="flex flex-col gap-6 max-w-6xl mx-auto">
-             <header className="flex justify-between items-end border-b border-slate-800 pb-6">
+          <div className="flex flex-col gap-8 max-w-6xl mx-auto animate-in fade-in slide-in-from-bottom-8 duration-700">
+             <header className="flex flex-col sm:flex-row justify-between items-start sm:items-end border-b border-slate-800/50 pb-6 gap-4">
               <div>
-                <h1 className="text-4xl font-bold tracking-tight">Organization Proposals</h1>
+                <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight text-gradient">Organization Proposals</h1>
                 <p className="text-slate-400 mt-2 text-lg">Suggestions for moves and renames based on content intelligence.</p>
-                <div className="flex gap-2 mt-6">
-                  <button onClick={() => setProposalFilter('all')} className={`px-4 py-1.5 rounded-full text-sm font-bold transition-all ${proposalFilter === 'all' ? 'bg-sky-500 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>All</button>
-                  <button onClick={() => setProposalFilter('move')} className={`px-4 py-1.5 rounded-full text-sm font-bold transition-all ${proposalFilter === 'move' ? 'bg-indigo-500 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>Moves</button>
-                  <button onClick={() => setProposalFilter('rename')} className={`px-4 py-1.5 rounded-full text-sm font-bold transition-all ${proposalFilter === 'rename' ? 'bg-pink-500 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>Renames</button>
+                <div className="flex gap-2 mt-6 p-1 bg-slate-900/80 rounded-full border border-slate-800 inline-flex shadow-inner">
+                  <button onClick={() => setProposalFilter('all')} className={`px-6 py-2 rounded-full text-sm font-bold transition-all duration-300 ${proposalFilter === 'all' ? 'bg-sky-500 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'}`}>All</button>
+                  <button onClick={() => setProposalFilter('move')} className={`px-6 py-2 rounded-full text-sm font-bold transition-all duration-300 ${proposalFilter === 'move' ? 'bg-indigo-500 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'}`}>Moves</button>
+                  <button onClick={() => setProposalFilter('rename')} className={`px-6 py-2 rounded-full text-sm font-bold transition-all duration-300 ${proposalFilter === 'rename' ? 'bg-pink-500 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'}`}>Renames</button>
                 </div>
               </div>
               <button 
                 onClick={applyChanges}
                 disabled={applying || !stats?.pendingItems}
-                className="bg-sky-600 hover:bg-sky-500 text-white font-bold px-8 py-3 rounded-xl flex items-center gap-2 transition-all shadow-lg shadow-sky-900/30 disabled:opacity-50"
+                className="btn-primary text-white font-bold px-8 py-3.5 rounded-xl flex items-center gap-3 transition-all shadow-lg shadow-sky-500/20 disabled:opacity-50 disabled:grayscale group text-lg shrink-0"
               >
-                {applying ? <RefreshCw className="w-5 h-5 animate-spin"/> : <Wand2 className="w-5 h-5"/>}
+                {applying ? <RefreshCw className="w-5 h-5 animate-spin"/> : <Wand2 className="w-5 h-5 group-hover:rotate-12 transition-transform"/>}
                 Apply Selected Changes
               </button>
             </header>
 
-            <div className="bg-slate-900/80 border border-slate-800 rounded-2xl overflow-hidden shadow-xl mt-4">
+            <div className="glass-card rounded-3xl overflow-hidden shadow-2xl mt-4 border border-slate-700/50">
               <table className="w-full text-left border-collapse table-fixed">
                 <thead>
                   <tr className="bg-slate-950 text-slate-400 text-xs uppercase tracking-widest border-b border-slate-800">
@@ -943,28 +952,28 @@ function App() {
         )}
 
         {step === 6 && (
-          <div className="flex flex-col items-center mt-20 gap-8 max-w-3xl mx-auto">
-            <div className="w-24 h-24 bg-green-500/20 rounded-full flex items-center justify-center border-4 border-green-500/50 shadow-xl shadow-green-500/20">
+          <div className="flex flex-col items-center mt-20 gap-8 max-w-3xl mx-auto animate-in fade-in slide-in-from-bottom-8 duration-700">
+            <div className="w-24 h-24 bg-green-500/10 rounded-full flex items-center justify-center border-4 border-green-500/30 shadow-xl shadow-green-500/20">
               <CheckCircle className="w-12 h-12 text-green-400" />
             </div>
             <div className="text-center">
-              <h1 className="text-5xl font-bold mb-4 tracking-tight">
+              <h1 className="text-5xl font-extrabold mb-4 tracking-tight text-gradient">
                 {lastApplyResult?.errors?.length ? 'Review Apply Results' : 'Organization Complete'}
               </h1>
               <p className="text-xl text-slate-400">Nyx applied approved changes and recorded the result in the local audit trail.</p>
             </div>
 
-            <div className="grid grid-cols-3 gap-6 w-full mt-8">
-              <div className="bg-slate-900/80 border border-slate-800 p-8 rounded-2xl text-center shadow-lg">
-                <div className="text-4xl font-bold text-sky-400 mb-3">{lastApplyResult?.applied?.length ?? 0}</div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 w-full mt-8">
+              <div className="glass-card p-8 rounded-3xl text-center shadow-xl border border-slate-700/50">
+                <div className="text-5xl font-extrabold text-sky-400 mb-3 drop-shadow-md">{lastApplyResult?.applied?.length ?? 0}</div>
                 <div className="text-slate-400 text-sm font-semibold uppercase tracking-widest">Actions Applied</div>
               </div>
-              <div className="bg-slate-900/80 border border-slate-800 p-8 rounded-2xl text-center shadow-lg">
-                <div className="text-4xl font-bold text-green-400 mb-3">{stats?.pendingItems ?? 0}</div>
+              <div className="glass-card p-8 rounded-3xl text-center shadow-xl border border-slate-700/50">
+                <div className="text-5xl font-extrabold text-green-400 mb-3 drop-shadow-md">{stats?.pendingItems ?? 0}</div>
                 <div className="text-slate-400 text-sm font-semibold uppercase tracking-widest">Items Remaining</div>
               </div>
-              <div className="bg-slate-900/80 border border-slate-800 p-8 rounded-2xl text-center shadow-lg">
-                <div className="text-4xl font-bold text-rose-400 mb-3">{lastApplyResult?.errors?.length ?? 0}</div>
+              <div className="glass-card p-8 rounded-3xl text-center shadow-xl border border-slate-700/50">
+                <div className="text-5xl font-extrabold text-rose-400 mb-3 drop-shadow-md">{lastApplyResult?.errors?.length ?? 0}</div>
                 <div className="text-slate-400 text-sm font-semibold uppercase tracking-widest">Apply Errors</div>
               </div>
             </div>
@@ -982,12 +991,12 @@ function App() {
               </div>
             ) : null}
 
-            <div className="flex gap-4 mt-8">
-              <button onClick={() => setStep(7)} className="bg-sky-600 hover:bg-sky-500 text-white px-10 py-4 rounded-xl font-bold transition-all shadow-xl shadow-sky-900/30 flex items-center gap-3 text-lg">
-                View V6 Cloud Backup Plan <ArrowRight className="w-6 h-6"/>
+            <div className="flex flex-col sm:flex-row gap-4 mt-8">
+              <button onClick={() => setStep(7)} className="btn-primary text-white px-10 py-4 rounded-xl font-bold transition-all shadow-xl shadow-sky-500/20 flex items-center justify-center gap-3 text-lg group w-full sm:w-auto">
+                View V6 Cloud Backup Plan <ArrowRight className="w-6 h-6 group-hover:translate-x-1 transition-transform"/>
               </button>
               {lastApplyResult?.applied?.length ? (
-                <button onClick={rollbackChanges} className="bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 border border-rose-500/20 px-10 py-4 rounded-xl font-bold transition-all flex items-center gap-3 text-lg">
+                <button onClick={rollbackChanges} className="glass-card hover:bg-slate-800/80 text-rose-300 px-10 py-4 rounded-xl font-bold transition-all flex items-center justify-center gap-3 text-lg w-full sm:w-auto">
                   Rollback Changes
                 </button>
               ) : null}
@@ -996,15 +1005,17 @@ function App() {
         )}
 
         {step === 7 && (
-          <div className="max-w-2xl mx-auto mt-20 text-center flex flex-col gap-6">
-            <div className="w-32 h-32 bg-sky-500/10 rounded-full flex items-center justify-center mx-auto mb-4 border border-sky-500/20">
-              <Cloud className="w-16 h-16 text-sky-500" />
+          <div className="max-w-2xl mx-auto mt-20 text-center flex flex-col gap-6 animate-in fade-in zoom-in-95 duration-700">
+            <div className="w-32 h-32 bg-sky-500/10 rounded-full flex items-center justify-center mx-auto mb-4 border border-sky-500/20 shadow-xl shadow-sky-500/20 relative group">
+              <div className="absolute inset-0 bg-sky-500/20 blur-xl rounded-full group-hover:bg-sky-400/30 transition-colors duration-500"></div>
+              <Cloud className="w-16 h-16 text-sky-400 relative z-10" />
             </div>
-            <h1 className="text-5xl font-bold tracking-tight">Cloud Backup Phase</h1>
+            <h1 className="text-5xl font-extrabold tracking-tight text-gradient">Cloud Backup Phase</h1>
             <p className="text-slate-400 text-xl leading-relaxed">Nyx is ready to mirror your newly organized taxonomy securely to Google Drive or OneDrive. This advanced feature is scheduled for V6.</p>
             
-            <div className="p-8 bg-slate-900/80 border border-slate-800 rounded-2xl text-left mt-8 shadow-xl">
-              <h3 className="font-bold text-xl mb-6 text-white border-b border-slate-800 pb-4">Upcoming Capabilities:</h3>
+            <div className="glass-card p-8 rounded-3xl text-left mt-8 shadow-2xl border border-slate-700/50 relative overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-purple-500/5 opacity-50"></div>
+              <h3 className="font-bold text-2xl mb-6 text-white border-b border-slate-800/50 pb-4 relative z-10">Upcoming Capabilities:</h3>
               <ul className="space-y-4">
                 <li className="flex items-start gap-3">
                   <CheckCircle className="w-6 h-6 text-green-500 shrink-0"/>
@@ -1153,13 +1164,7 @@ function App() {
 
       {/* Global CSS */}
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
-        body { font-family: 'Inter', sans-serif; }
-        .font-mono { font-family: 'JetBrains Mono', monospace; }
-        ::-webkit-scrollbar { width: 8px; height: 8px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: #475569; }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
       `}</style>
     </div>
   );

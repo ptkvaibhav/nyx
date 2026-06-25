@@ -41,7 +41,7 @@ export async function extractContent(filePath) {
               data = await parsePdfSilently(pdf, dataBuffer, { password: pwd });
               success = true;
               break;
-            } catch (e) {
+            } catch {
                // Ignore
             }
          }

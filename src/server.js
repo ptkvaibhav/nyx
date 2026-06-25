@@ -43,7 +43,9 @@ export async function startServer({ port = 3030, dbPath = DEFAULT_DB_PATH } = {}
       try {
         await access(uiIndexPath, constants.F_OK);
         uiBuilt = true;
-      } catch {}
+      } catch {
+        // ignore if not built
+      }
 
       const aiStatus = getAIStatus();
       // If AI is not available, trigger initialization asynchronously in the background
@@ -177,7 +179,7 @@ export async function startServer({ port = 3030, dbPath = DEFAULT_DB_PATH } = {}
         try {
           await pdf(dataBuffer, { password });
           isValid = true;
-        } catch (e) {
+        } catch {
           isValid = false;
         } finally {
           console.warn = originalWarn;
@@ -225,7 +227,9 @@ export async function startServer({ port = 3030, dbPath = DEFAULT_DB_PATH } = {}
           try {
             await access(`${drive}/`, constants.F_OK);
             availableDrives.push(`${drive}/`);
-          } catch {}
+          } catch {
+            // ignore inaccessible drives
+          }
         }
 
         const entries = [];
@@ -332,7 +336,7 @@ export async function startServer({ port = 3030, dbPath = DEFAULT_DB_PATH } = {}
       const match = str.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
       if (match) return match[1].trim();
       return str.trim();
-    } catch (e) {
+    } catch {
       return str;
     }
   }
@@ -494,7 +498,7 @@ Return ONLY a raw JSON string like {"proposedName": "New Name.pdf", "reasoning":
   app.use(express.static(uiPath));
 
   // Final fallback for React routing - using a middleware without a path to avoid regex issues
-  app.use((req, res, next) => {
+  app.use((req, res) => {
     // If it's an API call that didn't match, 404
     if (req.path.startsWith("/api")) {
       return res.status(404).json({ error: "API route not found" });
@@ -523,18 +527,7 @@ async function getManagedRoots() {
   return engagement.managedDirectories.map((root) => path.resolve(root));
 }
 
-function assertInsideManagedRoots(targetPath, managedRoots) {
-  const insideManagedRoot = managedRoots.some((rootPath) => {
-    const relativePath = path.relative(rootPath, targetPath);
-    return relativePath === "" || (!relativePath.startsWith("..") && !path.isAbsolute(relativePath));
-  });
 
-  if (!insideManagedRoot) {
-    const error = new Error(`Path is outside approved managed directories: ${targetPath}`);
-    error.statusCode = 403;
-    throw error;
-  }
-}
 
 async function getSafePath(filePath) {
   let resolvedPath = path.resolve(filePath);

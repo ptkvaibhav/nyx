@@ -72,7 +72,7 @@ async function ensureOllamaRunning() {
   try {
     const response = await fetch(OLLAMA_TAGS_URL);
     if (response.ok) return true;
-  } catch (e) {
+  } catch {
     // Not running
   }
 
@@ -95,7 +95,7 @@ async function ensureOllamaRunning() {
           console.log("Ollama service started successfully.");
           return true;
         }
-      } catch {}
+      } catch { /* ignore */ }
     }
   } catch (err) {
     console.error("Failed to start Ollama automatically:", err.message);
@@ -115,7 +115,7 @@ async function pullModel(modelName) {
       console.log(`Model '${modelName}' pulled successfully.`);
       return true;
     }
-  } catch {}
+  } catch { /* ignore */ }
 
   // Fallback to CLI pull
   try {

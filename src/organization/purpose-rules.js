@@ -1,6 +1,6 @@
 import path from "node:path";
 
-export const DEFAULT_FOLDERS_BY_CATEGORY = {
+const DEFAULT_FOLDERS_BY_CATEGORY = {
   archive: ["Archives"],
   code: ["Code"],
   document: ["Documents"],
@@ -45,7 +45,7 @@ function extractDate(text, baseName, relativePath = "") {
   return { year: null, month: null };
 }
 
-export const PURPOSE_RULES = [
+const PURPOSE_RULES = [
   {
     purpose: "resume",
     expectedFolders: ["Resumes"],
@@ -104,7 +104,7 @@ export const PURPOSE_RULES = [
 
 export const VERSION_PATTERN = /([._-]v?(\d+([._]\d+)*))|(\\((\d+)\\))|([- ]Copy( \\((\d+)\\))?)$/i;
 
-export const CODE_EXTENSIONS = new Set([
+const CODE_EXTENSIONS = new Set([
   ".js", ".ts", ".jsx", ".tsx", ".py", ".java", ".c", ".cpp", ".h", ".hpp", ".cs", ".go", ".rs", ".rb", ".php", ".html", ".css", ".sql", ".sh", ".bat", ".ps1", ".yml", ".yaml", ".json", ".xml", ".md", ".sol"
 ]);
 

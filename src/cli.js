@@ -15,7 +15,7 @@ import { buildCloudAudit } from "./organization/cloud-audit.js";
 import { applyApprovedReview, rollbackAppliedReview } from "./organization/executor.js";
 import { buildLocalAudit } from "./organization/local-audit.js";
 import { buildProtectionPlan } from "./organization/protection.js";
-import { approveReviewItems, DEFAULT_REVIEW_PATH, loadReviewManifest, saveReviewManifest } from "./organization/review-store.js";
+import { DEFAULT_REVIEW_PATH, saveReviewManifest } from "./organization/review-store.js";
 import { ensureLocalDriveScaffold, getLocalDriveStatus } from "./providers/local-drive.js";
 import { createMockProviderSnapshots } from "./providers/mock-snapshots.js";
 import { explainPricingStrategy } from "./advisory/pricing-catalog.js";
@@ -26,35 +26,6 @@ import { setupOllama } from "./core/ollama-manager.js";
 const [, , command, ...args] = process.argv;
 const DEFAULT_DB_PATH = ".nyx/nyx.db";
 
-const handlers = {
-  plan: printPlan,
-  doctor: runDoctor,
-  "setup-ai": runSetupAi,
-  demo: runDemo,
-  "engagement-summary": runEngagementSummary,
-  "audit-local": runAuditLocal,
-  "review-local": runReviewLocal,
-  "prepare-local-organization": runPrepareLocalOrganization,
-  "local-organization-status": runReviewStatus,
-  "approve-local-organization": runApproveReview,
-  "apply-local-organization": runApplyReview,
-  "rollback-local-organization": runRollbackLocalOrganization,
-  "prepare-review": runPrepareReview,
-  "review-status": runReviewStatus,
-  "approve-review": runApproveReview,
-  "apply-review": runApplyReview,
-  "audit-cloud": runAuditCloud,
-  "plan-protection": runPlanProtection,
-  "prepare-archive": runPrepareArchive,
-  "init-drive": runInitDrive,
-  "drive-status": runDriveStatus,
-  scan: runScan,
-  "sync-file": runSyncFile,
-  decide: runDecide,
-  fingerprint: runFingerprint,
-  classify: runClassify,
-  ui: runUi
-};
 
 async function main() {
   if (command === "doctor") {
@@ -213,7 +184,7 @@ async function runReviewLocal(args) {
   }, null, 2));
 }
 
-async function runPrepareLocalOrganization(args) {
+async function _runPrepare(args, isLocal) {
   const engagementPath = args[0] ?? "docs/engagement.md";
   const dbPath = args[1] ?? DEFAULT_DB_PATH;
   
@@ -221,43 +192,37 @@ async function runPrepareLocalOrganization(args) {
   const catalog = await Catalog.open(dbPath);
   const items = catalog.getPendingReviewItems();
 
+  const totals = {
+    pendingItems: items.length,
+    organizationProposals: items.filter(i => i.type === "organization_proposal").length,
+    mutationItems: items.filter(i => i.risk === "mutation").length
+  };
+
+  if (!isLocal) {
+    totals.irrelevanceFindings = items.filter(i => i.type === "irrelevance_finding").length;
+  }
+
+  const approvePrefix = isLocal ? "approve-local-organization" : "approve-review";
+  const applyPrefix = isLocal ? "apply-local-organization" : "apply-review";
+  const statusPrefix = isLocal ? "local-organization-status" : "review-status";
+
   console.log(JSON.stringify({
     dbPath: path.resolve(dbPath),
-    totals: {
-      pendingItems: items.length,
-      organizationProposals: items.filter(i => i.type === "organization_proposal").length,
-      mutationItems: items.filter(i => i.risk === "mutation").length
-    },
+    totals,
     nextSteps: [
-      `node src/cli.js local-organization-status ${dbPath}`,
-      `node src/cli.js approve-local-organization <item-id|all> ${dbPath}`,
-      `node src/cli.js apply-local-organization ${dbPath}`
+      `node src/cli.js ${statusPrefix} ${dbPath}`,
+      `node src/cli.js ${approvePrefix} <item-id|all> ${dbPath}`,
+      `node src/cli.js ${applyPrefix} ${dbPath}`
     ]
   }, null, 2));
 }
 
-async function runPrepareReview(args) {
-  const engagementPath = args[0] ?? "docs/engagement.md";
-  const dbPath = args[1] ?? DEFAULT_DB_PATH;
-  
-  await buildLocalAudit({ engagementPath, dbPath });
-  const catalog = await Catalog.open(dbPath);
-  const items = catalog.getPendingReviewItems();
+async function runPrepareLocalOrganization(args) {
+  await _runPrepare(args, true);
+}
 
-  console.log(JSON.stringify({
-    dbPath: path.resolve(dbPath),
-    totals: {
-      pendingItems: items.length,
-      organizationProposals: items.filter(i => i.type === "organization_proposal").length,
-      irrelevanceFindings: items.filter(i => i.type === "irrelevance_finding").length,
-      mutationItems: items.filter(i => i.risk === "mutation").length
-    },
-    nextSteps: [
-      `node src/cli.js local-organization-status ${dbPath}`,
-      `node src/cli.js approve-local-organization <item-id|all> ${dbPath}`,
-      `node src/cli.js apply-local-organization ${dbPath}`
-    ]
-  }, null, 2));
+async function runPrepareReview(args) {
+  await _runPrepare(args, false);
 }
 
 async function runReviewStatus(args) {
@@ -436,7 +401,7 @@ async function runUi(args) {
   try {
     const open = (await import("open")).default;
     await open(`http://localhost:${actualPort}`);
-  } catch (err) {
+  } catch {
     console.log(`Open browser automatically failed. Please visit http://localhost:${actualPort}`);
   }
 }
@@ -478,37 +443,6 @@ async function exists(targetPath) {
   }
 }
 
-function printUsage() {
-  console.log("Usage: node src/cli.js <command>");
-  console.log("");
-  console.log("Commands:");
-  console.log("- plan");
-  console.log("- doctor");
-  console.log("- setup-ai");
-  console.log("- demo");
-  console.log("- ui [port] [db-path]");
-  console.log("- engagement-summary [engagement-path]");
-  console.log("- audit-local [engagement-path]");
-  console.log("- review-local [engagement-path]");
-  console.log("- prepare-local-organization [engagement-path] [review-path]");
-  console.log("- local-organization-status [review-path]");
-  console.log("- approve-local-organization <item-id|all> [review-path]");
-  console.log("- apply-local-organization [review-path]");
-  console.log("- prepare-review [engagement-path] [review-path]");
-  console.log("- review-status [review-path]");
-  console.log("- approve-review <item-id|all> [review-path]");
-  console.log("- apply-review [review-path]");
-  console.log("- audit-cloud [config-path]");
-  console.log("- plan-protection [engagement-path] [config-path]");
-  console.log("- prepare-archive [engagement-path] [config-path] [review-path]");
-  console.log("- init-drive");
-  console.log("- drive-status");
-  console.log("- scan");
-  console.log("- sync-file <file-path>");
-  console.log("- decide <file-path>");
-  console.log("- fingerprint <file-path>");
-  console.log("- classify <file-path>");
-}
 
 main().catch(async (error) => {
   console.error(error.message);
