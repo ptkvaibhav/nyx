@@ -3,7 +3,7 @@ import path from "node:path";
 import { realpath, access } from "node:fs/promises";
 import { constants } from "node:fs";
 import { Catalog } from "./core/catalog.js";
-import { applyApprovedReview, rollbackAppliedReview } from "./organization/executor.js";
+import { applyApprovedReview, rollbackAppliedReview, rollbackSingleReviewItem } from "./organization/executor.js";
 import { initAI, askAI, getAIStatus, robustParseJSON } from "./core/ai.js";
 import { buildLocalAudit } from "./organization/local-audit.js";
 import { loadEngagement } from "./engagement/parser.js";
@@ -486,6 +486,16 @@ Return ONLY a raw JSON string like {"proposedName": "New Name.pdf", "reasoning":
   app.post("/api/rollback", async (req, res) => {
     try {
       const result = await rollbackAppliedReview({ catalog });
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/items/:id/rollback", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const result = await rollbackSingleReviewItem(id, { catalog });
       res.json(result);
     } catch (error) {
       res.status(500).json({ error: error.message });

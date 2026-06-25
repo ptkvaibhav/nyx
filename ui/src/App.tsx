@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Layout, Copy, Wand2, CheckCircle, ArrowRight, RefreshCw, FolderSearch, Cloud, Sparkles, KeyRound, Trash2, Info, FileMinus, FilePlus, FolderOpen, Eye, Edit2, Check, X, Folder, ArrowUpLeft, File } from 'lucide-react';
+import { Layout, Copy, Wand2, CheckCircle, ArrowRight, RefreshCw, FolderSearch, Cloud, Sparkles, KeyRound, Trash2, Info, FilePlus, FolderOpen, Edit2, Check, X, Folder, ArrowUpLeft, File } from 'lucide-react';
 
 interface Stats {
   totalFiles: number;
@@ -60,6 +60,7 @@ function App() {
   const [browseEntries, setBrowseEntries] = useState<{ name: string; path: string; isDirectory: boolean }[]>([]);
   const [isBrowseRoot, setIsBrowseRoot] = useState(true);
   const [showPickerModal, setShowPickerModal] = useState(false);
+  const [moveItemEditingId, setMoveItemEditingId] = useState<string | null>(null);
   const [selectedPaths, setSelectedPaths] = useState<string[]>([]);
 
   const fetchDirectoryListing = async (pathStr: string) => {
@@ -96,8 +97,14 @@ function App() {
   };
 
   const selectBrowsedDirectory = (selectedPath: string) => {
-    setDirectory(selectedPath);
-    setShowPickerModal(false);
+    if (moveItemEditingId) {
+      setEditingName(selectedPath + '\\' + (editingName.split('\\').pop()?.split('/').pop() || ''));
+      setShowPickerModal(false);
+      setMoveItemEditingId(null);
+    } else {
+      setDirectory(selectedPath);
+      setShowPickerModal(false);
+    }
   };
 
   const confirmSelection = () => {
@@ -317,11 +324,19 @@ function App() {
     // Optimistically update the UI
     setItems(prev => prev.map(i => {
       if (i.id === id) {
-        return {
-          ...i,
-          proposedPath: i.proposedPath?.replace(/[^\\/]+$/, editingName),
-          evidence: { ...i.evidence, proposedName: editingName }
-        };
+        if (i.action === 'move_file') {
+          return {
+            ...i,
+            proposedPath: editingName,
+            evidence: { ...i.evidence, proposedRelativePath: editingName }
+          };
+        } else {
+          return {
+            ...i,
+            proposedPath: i.proposedPath?.replace(/[^\\/]+$/, editingName),
+            evidence: { ...i.evidence, proposedName: editingName }
+          };
+        }
       }
       return i;
     }));
@@ -401,6 +416,19 @@ function App() {
     }
   };
 
+  const rollbackItem = async (id: string) => {
+    try {
+      const res = await fetch(`/api/items/${id}/rollback`, { method: 'POST' });
+      if (res.ok) {
+        await fetchData();
+      } else {
+        alert("Failed to rollback item");
+      }
+    } catch {
+      alert("Error rolling back item");
+    }
+  };
+
   const applyChanges = async () => {
     setApplying(true);
     try {
@@ -438,8 +466,8 @@ function App() {
             { s: 1, label: '1. Select Directory', icon: FolderSearch },
             { s: 2, label: '2. AI Analysis', icon: RefreshCw },
             { s: 3, label: '3. AI Exclusions', icon: Sparkles },
-            { s: 4, label: `4. Duplicates (${stats?.duplicates ?? 0})`, icon: Copy },
-            { s: 5, label: `5. Organization (${stats?.proposals ?? 0})`, icon: Wand2 },
+            { s: 4, label: '4. Duplicates', icon: Copy },
+            { s: 5, label: '5. Organization', icon: Wand2 },
             { s: 6, label: '6. Summary', icon: CheckCircle },
             { s: 7, label: '7. Cloud Backup', icon: Cloud }
           ].map(({ s, label, icon: Icon }) => (
@@ -461,9 +489,22 @@ function App() {
         {step === 1 && (
           <div className="max-w-2xl mx-auto mt-20 flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-8 duration-700 ease-out">
             <div className="text-center">
-              <h1 className="text-4xl sm:text-5xl font-extrabold mb-6 tracking-tight text-gradient">What would you like to organize?</h1>
+              <h1 className="text-4xl sm:text-5xl font-extrabold mb-6 tracking-tight text-gradient pb-2 leading-normal overflow-visible">What would you like to organize?</h1>
               <p className="text-slate-400 text-lg max-w-xl mx-auto leading-relaxed">Enter an approved managed directory. Nyx will refuse paths outside the engagement scope.</p>
             </div>
+            
+            {stats && (
+              <div className="grid grid-cols-2 gap-4 mt-2">
+                <div className="glass-card p-6 rounded-2xl text-center shadow-lg border border-slate-700/50">
+                   <div className="text-4xl font-extrabold text-sky-400 mb-2">{stats.duplicates}</div>
+                   <div className="text-slate-400 text-xs font-semibold uppercase tracking-widest">Duplicates</div>
+                </div>
+                <div className="glass-card p-6 rounded-2xl text-center shadow-lg border border-slate-700/50">
+                   <div className="text-4xl font-extrabold text-indigo-400 mb-2">{stats.proposals}</div>
+                   <div className="text-slate-400 text-xs font-semibold uppercase tracking-widest">Proposals</div>
+                </div>
+              </div>
+            )}
             
             <div className="glass-card p-8 rounded-2xl mt-4 relative overflow-hidden group">
               <div className="absolute inset-0 bg-gradient-to-br from-sky-500/5 to-indigo-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
@@ -764,9 +805,6 @@ function App() {
                         />
                         <Copy className="w-4 h-4 text-slate-500" />
                         <span className="text-sm font-mono text-slate-400">SHA256: {item.evidence.sha256.slice(0, 16)}...</span>
-                        <button onClick={() => openFileLocally(item.subjectPath)} className="text-sky-400 hover:text-sky-300 transition-colors ml-2" title="Open File Natively">
-                          <Eye className="w-4 h-4" />
-                        </button>
                       </div>
                       <div className="flex gap-2">
                         <button 
@@ -792,7 +830,7 @@ function App() {
                         <div className="p-5 bg-green-500/5 border border-green-500/20 rounded-xl text-sm font-mono whitespace-normal break-all shadow-inner relative pr-10" title={item.evidence.proposedKeepPath || item.evidence.keptPath}>
                           {(item.evidence.proposedKeepPath || item.evidence.keptPath)?.split('\\').pop()}
                           <button onClick={() => openFileLocally(item.evidence.proposedKeepPath || item.evidence.keptPath)} className="absolute right-3 top-1/2 -translate-y-1/2 text-sky-400 hover:text-sky-300 transition-colors" title="Open Keep File Natively">
-                             <Eye className="w-5 h-5" />
+                             <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="currentColor" className="w-5 h-5"><path d="M240-160q-33 0-56.5-23.5T160-240v-480q0-33 23.5-56.5T240-800h320l240 240v320q0 33-23.5 56.5T720-160H240Zm280-480v-160H240v480h480v-320H520ZM240-800v160-160 480-480Z"/></svg>
                           </button>
                         </div>
                       </div>
@@ -801,7 +839,7 @@ function App() {
                         <div className="p-5 bg-rose-500/5 border border-rose-500/20 rounded-xl text-sm font-mono whitespace-normal break-all opacity-60 line-through decoration-rose-500/50 shadow-inner relative pr-10" title={item.evidence.proposedDeletePaths?.[0] || item.evidence.deletedPaths?.[0]}>
                           {(item.evidence.proposedDeletePaths?.[0] || item.evidence.deletedPaths?.[0])?.split('\\').pop()}
                           <button onClick={() => openFileLocally(item.evidence.proposedDeletePaths?.[0] || item.evidence.deletedPaths?.[0])} className="absolute right-3 top-1/2 -translate-y-1/2 text-sky-400 hover:text-sky-300 transition-colors opacity-100" title="Open Duplicate File Natively">
-                             <Eye className="w-5 h-5" />
+                             <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="currentColor" className="w-5 h-5"><path d="M240-160q-33 0-56.5-23.5T160-240v-480q0-33 23.5-56.5T240-800h320l240 240v320q0 33-23.5 56.5T720-160H240Zm280-480v-160H240v480h480v-320H520ZM240-800v160-160 480-480Z"/></svg>
                           </button>
                         </div>
                       </div>
@@ -862,10 +900,10 @@ function App() {
                       <td className="px-6 py-5 pr-8">
                         <div className="flex flex-col gap-3 mb-4">
                           <div className="flex items-center gap-3 text-slate-500 line-through decoration-rose-500/50 overflow-hidden">
-                            <div className="p-2 bg-slate-950 rounded border border-slate-800 shrink-0"><FileMinus className="w-4 h-4 text-rose-400"/></div>
+                            <div className="p-2 bg-slate-950 rounded border border-slate-800 shrink-0"><File className="w-4 h-4 text-slate-400"/></div>
                             <span className="text-xs font-mono whitespace-normal break-all w-full" title={item.subjectPath}>{item.subjectPath}</span>
                             <button onClick={() => openFileLocally(item.subjectPath)} className="text-sky-400 hover:text-sky-300 transition-colors ml-auto shrink-0" title="Open File Natively">
-                              <Eye className="w-4 h-4" />
+                              <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="currentColor" className="w-4 h-4"><path d="M240-160q-33 0-56.5-23.5T160-240v-480q0-33 23.5-56.5T240-800h320l240 240v320q0 33-23.5 56.5T720-160H240Zm280-480v-160H240v480h480v-320H520ZM240-800v160-160 480-480Z"/></svg>
                             </button>
                           </div>
                           
@@ -882,6 +920,13 @@ function App() {
                                   autoFocus
                                   onKeyDown={e => e.key === 'Enter' && handleSaveEdit(item.id)}
                                 />
+                                {item.action === 'move_file' && (
+                                  <button onClick={() => {
+                                    setMoveItemEditingId(item.id);
+                                    fetchDirectoryListing(directory.split(',')[0]);
+                                    setShowPickerModal(true);
+                                  }} className="p-1 hover:bg-sky-500/20 rounded text-sky-400" title="Choose Folder"><FolderSearch className="w-4 h-4"/></button>
+                                )}
                                 <button onClick={() => handleSaveEdit(item.id)} className="p-1 hover:bg-green-500/20 rounded text-green-400"><Check className="w-4 h-4"/></button>
                                 <button onClick={handleCancelEdit} className="p-1 hover:bg-rose-500/20 rounded text-rose-400"><X className="w-4 h-4"/></button>
                               </div>
@@ -893,9 +938,9 @@ function App() {
                                 <button 
                                   onClick={() => {
                                     setEditingItemId(item.id);
-                                    setEditingName(item.evidence?.proposedName || item.proposedPath?.split('\\').pop()?.split('/').pop() || "");
+                                    setEditingName(item.action === 'move_file' ? (item.evidence?.proposedRelativePath || item.proposedPath || "") : (item.evidence?.proposedName || item.proposedPath?.split('\\').pop()?.split('/').pop() || ""));
                                   }} 
-                                  className="text-slate-500 hover:text-sky-400 opacity-0 group-hover:opacity-100 transition-all shrink-0 ml-auto"
+                                  className="text-slate-500 hover:text-sky-400 transition-all shrink-0 ml-auto"
                                   title="Edit Name"
                                 >
                                   <Edit2 className="w-4 h-4" />
@@ -912,27 +957,39 @@ function App() {
                               <Sparkles className="w-4 h-4 shrink-0 mt-0.5 text-amber-400" />
                               <span className="leading-relaxed">{aiReasoning[item.id]}</span>
                             </div>
-                          ) : (
-                            <button onClick={() => getAiReasoning(item)} className="text-sm text-slate-400 hover:text-amber-400 flex items-center gap-2 transition-colors font-medium border border-transparent hover:border-amber-400/20 hover:bg-amber-400/5 px-3 py-1.5 rounded-lg">
-                              <Sparkles className="w-4 h-4"/> Ask AI for reasoning
-                            </button>
-                          )}
+                          ) : null}
                         </div>
                       </td>
                       <td className="px-6 py-5 text-right align-top w-56">
                          <div className="flex flex-col gap-2">
-                           <button 
-                              onClick={() => approveItem(item.id, item)}
-                              className={`px-5 py-2 rounded-lg text-sm font-bold transition-all w-full ${item.status === 'approved' ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700 hover:text-white'}`}
-                            >
-                              {item.status === 'approved' ? '✓ Approved' : 'Approve'}
-                            </button>
-                            <button 
-                              onClick={() => rejectItem(item.id)}
-                              className="px-5 py-2 rounded-lg text-sm font-bold transition-all w-full bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-500/20"
-                            >
-                              Reject
-                            </button>
+                           {item.status === 'applied' ? (
+                             <button 
+                               onClick={() => rollbackItem(item.id)}
+                               className="px-5 py-2 rounded-lg text-sm font-bold transition-all w-full bg-amber-500/10 text-amber-400 border border-amber-500/20 hover:bg-amber-500/20 flex items-center justify-center gap-2"
+                             >
+                               <RefreshCw className="w-4 h-4" /> Rollback
+                             </button>
+                           ) : (
+                             <>
+                               <button 
+                                 onClick={() => approveItem(item.id, item)}
+                                 className={`px-5 py-2 rounded-lg text-sm font-bold transition-all w-full ${item.status === 'approved' ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700 hover:text-white'}`}
+                               >
+                                 {item.status === 'approved' ? '✓ Approved' : 'Approve'}
+                               </button>
+                               <button 
+                                 onClick={() => rejectItem(item.id)}
+                                 className="px-5 py-2 rounded-lg text-sm font-bold transition-all w-full bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-500/20"
+                               >
+                                 Reject
+                               </button>
+                               {!aiReasoning[item.id] && (
+                                 <button onClick={() => getAiReasoning(item)} className="text-xs text-slate-400 hover:text-amber-400 flex items-center justify-center gap-2 transition-colors font-medium bg-slate-900 border border-slate-700 hover:border-amber-400/30 px-3 py-2 rounded-lg">
+                                   <Sparkles className="w-3.5 h-3.5"/> Ask AI
+                                 </button>
+                               )}
+                             </>
+                           )}
                          </div>
                       </td>
                     </tr>

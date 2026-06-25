@@ -135,6 +135,53 @@ export async function rollbackAppliedReview({
   return result;
 }
 
+export async function rollbackSingleReviewItem(itemId, {
+  catalog,
+  engagementPath = "docs/engagement.md",
+  auditLogPath = DEFAULT_AUDIT_LOG_PATH
+} = {}) {
+  const { managedDirectories } = await loadEngagement(engagementPath);
+  const managedRoots = managedDirectories.map((root) => path.resolve(root));
+  
+  const rawApplied = catalog.db.prepare("SELECT * FROM review_items WHERE status = 'applied' AND id = ?").all(itemId).map(row => {
+    return {
+      ...row,
+      evidence: JSON.parse(row.evidence_json)
+    };
+  });
+
+  if (rawApplied.length === 0) {
+    throw new Error(`Item ${itemId} is not in applied state or does not exist`);
+  }
+
+  const item = rawApplied[0];
+
+  const rollbackAction = item.evidence?.rollback;
+  if (!rollbackAction) {
+    throw new Error(`No rollback metadata found for item ${item.id}`);
+  }
+
+  const rolledBack = await executeRollback({ rollbackAction, managedRoots });
+  
+  catalog.db.prepare("UPDATE review_items SET status = 'pending_user_approval', approved = 0, applied_at = NULL, updated_at = ? WHERE id = ?")
+    .run(new Date().toISOString(), item.id);
+
+  await appendAuditEntry({
+    auditLogPath,
+    entry: {
+      action: "rollback",
+      itemId: item.id,
+      appliedAt: new Date().toISOString(),
+      details: rolledBack
+    }
+  });
+
+  return {
+    itemId: item.id,
+    ...rolledBack
+  };
+}
+
 function sortRollbackItems(items) {
   const actionPriority = new Map([
     ["rename_file", 0],
