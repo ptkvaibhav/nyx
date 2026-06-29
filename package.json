@@ -42,9 +42,17 @@
     "ui:build": "cd ui && npm run build"
   },
   "dependencies": {
-    "better-sqlite3": "^12.9.0",
+    "better-sqlite3": "^12.11.1",
     "express": "^5.2.1",
     "open": "^11.0.0",
-    "pdf-parse": "^1.1.1"
+    "pdf-parse": "^2.4.5"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.5.0",
+    "globals": "^17.7.0",
+    "jscpd": "^5.0.11",
+    "knip": "^6.20.0",
+    "npm-check-updates": "^22.2.7"
   }
 }

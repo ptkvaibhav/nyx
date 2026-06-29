@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
+import { collectFiles } from "./utils.js";
 
 const repoRoot = process.cwd();
 const targetDirectories = ["src", "test", "scripts"];
@@ -22,7 +23,7 @@ for (const filePath of jsFiles) {
     new Function(normalized);
   } catch (error) {
     const relativePath = path.relative(repoRoot, filePath).replaceAll("\\", "/");
-    throw new Error(`Syntax normalization check failed for ${relativePath}: ${error.message}`);
+    throw new Error(`Syntax normalization check failed for ${relativePath}: ${error.message}`, { cause: error });
   }
 }
 
@@ -46,22 +47,3 @@ function wrapForParsing(code) {
   return `(async () => {\n${code}\n})();`;
 }
 
-function collectFiles(startPath, extension) {
-  const entries = readdirSync(startPath, { withFileTypes: true });
-  const results = [];
-
-  for (const entry of entries) {
-    const absolutePath = path.join(startPath, entry.name);
-
-    if (entry.isDirectory()) {
-      results.push(...collectFiles(absolutePath, extension));
-      continue;
-    }
-
-    if (entry.isFile() && absolutePath.endsWith(extension)) {
-      results.push(absolutePath);
-    }
-  }
-
-  return results;
-}

@@ -194,7 +194,7 @@ export function robustParseJSON(str) {
       if (repairedObj.category && repairedObj.proposedName) {
         return repairedObj;
       }
-    } catch (err) {
+    } catch {
       // Ignore recovery errors and throw original
     }
     throw e;

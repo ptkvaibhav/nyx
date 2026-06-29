@@ -38,16 +38,16 @@ export async function initializeDatabase(dbPath = DEFAULT_DB_PATH) {
   // Migrate existing databases to add the new columns if they do not exist
   try {
     db.exec("ALTER TABLE files ADD COLUMN extracted_text TEXT");
-  } catch (e) {}
+  } catch { /* ignore */ }
   try {
     db.exec("ALTER TABLE files ADD COLUMN proposed_name TEXT");
-  } catch (e) {}
+  } catch { /* ignore */ }
   try {
     db.exec("ALTER TABLE files ADD COLUMN expected_folder TEXT");
-  } catch (e) {}
+  } catch { /* ignore */ }
   try {
     db.exec("ALTER TABLE files ADD COLUMN ai_reasoning TEXT");
-  } catch (e) {}
+  } catch { /* ignore */ }
 
   db.exec(`CREATE INDEX IF NOT EXISTS idx_files_sha256 ON files(sha256)`);
 

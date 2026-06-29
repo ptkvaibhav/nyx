@@ -6,16 +6,7 @@ import { askAI } from "../core/ai.js";
 import { findDuplicateGroups } from "./duplicates.js";
 import { identifyProposedKeepFile } from "./irrelevance.js";
 
-function cleanJSON(str) {
-  try {
-    const match = str.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-    if (match) return match[1].trim();
-    return str.trim();
-  } catch (e) {
-    return str;
-  }
-}
-
+import { cleanJSON } from "./utils.js";
 const PURPOSE_LABELS = {
   resume: "Resume",
   "travel-ticket": "Travel_Ticket",
@@ -195,7 +186,7 @@ Return ONLY a raw JSON string like {"proposedName": "New Name", "reasoning": "wh
      return `${currentBaseName}${extension}`;
   }
 
-  const isGarbageName = /^(document|scan|img|whatsapp|signal|screenshot|untitled|\d+)[_\s\-]*\d*$/i.test(currentBaseName);
+  const isGarbageName = /^(document|scan|img|whatsapp|signal|screenshot|untitled|\d+)[_\s-]*\d*$/i.test(currentBaseName);
   
   let extractedName = "";
   if (file.extractedText) {

@@ -101,7 +101,7 @@ export function analyzeFileStructure(fileEntry) {
   };
 }
 
-export function inferPurpose(fileEntry, classification = classifyFile(fileEntry)) {
+function inferPurpose(fileEntry, classification = classifyFile(fileEntry)) {
   return inferPurposeDetails({
     absolutePath: fileEntry.absolutePath,
     relativePath: fileEntry.relativePath,

@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
+import { collectFiles } from "./utils.js";
 
 const repoRoot = process.cwd();
 const targetDirectories = ["src", "test"];
@@ -44,23 +45,4 @@ if (findings.length > 0) {
 
 console.log(`Security check passed for ${jsFiles.length} JavaScript files.`);
 
-function collectFiles(startPath, extension) {
-  const entries = readdirSync(startPath, { withFileTypes: true });
-  const results = [];
-
-  for (const entry of entries) {
-    const absolutePath = path.join(startPath, entry.name);
-
-    if (entry.isDirectory()) {
-      results.push(...collectFiles(absolutePath, extension));
-      continue;
-    }
-
-    if (entry.isFile() && absolutePath.endsWith(extension)) {
-      results.push(absolutePath);
-    }
-  }
-
-  return results;
-}
 

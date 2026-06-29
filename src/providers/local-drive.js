@@ -34,7 +34,7 @@ export async function loadLocalDriveState({ driveRoot, providers }) {
   return mergeWithProviderDefaults(persisted, providers);
 }
 
-export async function saveLocalDriveState({ driveRoot, state }) {
+async function saveLocalDriveState({ driveRoot, state }) {
   const statePath = path.join(driveRoot, STATE_FILE);
   await writeFile(statePath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
 }

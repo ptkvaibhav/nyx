@@ -250,7 +250,6 @@ async function runAIAnalysisForFile(file, relativePath) {
         extractedText: file.extractedText
      });
      
-     const extension = file.extension || path.extname(file.absolutePath);
      const label = purposeDetails.renameLabel || "File";
      const timestamp = file.modifiedAt ? file.modifiedAt.split("T")[0].replaceAll("-", "") : "20260101";
      const proposedName = `${label}_${timestamp}`;
@@ -315,15 +314,5 @@ You must return ONLY a raw JSON string matching this schema:
       proposedName: path.basename(file.absolutePath, file.extension),
       reasoning: ""
     };
-  }
-}
-
-function cleanJSON(str) {
-  try {
-    const match = str.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-    if (match) return match[1].trim();
-    return str.trim();
-  } catch (e) {
-    return str;
   }
 }

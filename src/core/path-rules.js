@@ -1,4 +1,4 @@
-export function matchesAnyRule(relativePath, rules = []) {
+function matchesAnyRule(relativePath, rules = []) {
   if (!rules.length) {
     return false;
   }

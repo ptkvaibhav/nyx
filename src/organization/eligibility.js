@@ -1,19 +1,3 @@
-const CATEGORY_ROOTS = new Set([
-  "archives",
-  "code",
-  "documents",
-  "education",
-  "finance",
-  "identity",
-  "installers",
-  "legal",
-  "photos",
-  "projects",
-  "resumes",
-  "tickets",
-  "videos"
-]);
-
 const METADATA_FILE_NAMES = new Set(["desktop.ini", "thumbs.db"]);
 const SKIPPED_SEGMENTS = new Set([
   ".git",
